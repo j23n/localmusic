@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6C5CE7"/>
+      <stop offset="100%" stop-color="#341F97"/>
+    </linearGradient>
+    <linearGradient id="folder" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFC312"/>
+      <stop offset="100%" stop-color="#F79F1F"/>
+    </linearGradient>
+    <linearGradient id="folderFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FECA57"/>
+      <stop offset="100%" stop-color="#FFC312"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <!-- Folder back -->
+  <path d="M200 340 L200 760 C200 782 218 800 240 800 L784 800 C806 800 824 782 824 760 L824 380 C824 358 806 340 784 340 Z" fill="url(#folder)" opacity="0.6"/>
+
+  <!-- Folder tab -->
+  <path d="M200 340 L200 300 C200 278 218 260 240 260 L420 260 L480 340 Z" fill="url(#folder)" opacity="0.6"/>
+
+  <!-- Folder front -->
+  <path d="M170 420 L170 780 C170 802 188 820 210 820 L814 820 C836 820 854 802 854 780 L854 420 C854 398 836 380 814 380 L210 380 C188 380 170 398 170 420 Z" fill="url(#folderFront)"/>
+
+  <!-- Music note / play symbol -->
+  <g transform="translate(512, 610)">
+    <!-- Vinyl disc -->
+    <circle cx="0" cy="0" r="155" fill="#341F97" opacity="0.85"/>
+    <circle cx="0" cy="0" r="140" fill="none" stroke="#6C5CE7" stroke-width="3" opacity="0.5"/>
+    <circle cx="0" cy="0" r="105" fill="none" stroke="#6C5CE7" stroke-width="2" opacity="0.3"/>
+    <circle cx="0" cy="0" r="70" fill="none" stroke="#6C5CE7" stroke-width="2" opacity="0.3"/>
+
+    <!-- Center hole -->
+    <circle cx="0" cy="0" r="28" fill="#FECA57"/>
+
+    <!-- Play triangle in center -->
+    <polygon points="10,-18 10,18 -8,0" fill="#341F97" transform="translate(-2, 0)"/>
+  </g>
+</svg>
