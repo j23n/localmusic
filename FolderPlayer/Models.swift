@@ -28,10 +28,11 @@ struct Track: Identifiable, Codable, Hashable {
     }
 }
 
-// MARK: - Playlist
+// MARK: - Playlist (discovered from .m3u / .m3u8 / .pls files)
 
-struct Playlist: Identifiable, Codable {
-    let id: UUID
-    var name: String
-    var trackIDs: [UUID]
+struct Playlist: Identifiable {
+    var id: URL { fileURL }
+    let fileURL: URL
+    let name: String
+    var trackURLs: [URL]
 }

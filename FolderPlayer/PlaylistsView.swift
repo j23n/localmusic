@@ -3,44 +3,44 @@ import SwiftUI
 struct PlaylistsView: View {
     @EnvironmentObject private var player: AudioPlayerManager
     @State private var playlists: [Playlist] = []
+    @State private var library: [Track] = []
+    @State private var isLoading = false
     @State private var showNewPlaylistAlert = false
     @State private var newPlaylistName = ""
-    @State private var library: [Track] = []
 
     var body: some View {
         NavigationStack {
             Group {
-                if playlists.isEmpty {
+                if isLoading {
+                    ProgressView("Scanning for playlists…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if playlists.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "rectangle.stack")
                             .font(.system(size: 48))
                             .foregroundStyle(.secondary)
-                        Text("No Playlists")
+                        Text("No Playlists Found")
                             .font(.title3)
                             .fontWeight(.medium)
-                        Text("Tap + to create your first playlist.")
+                        Text("Add .m3u or .pls files to your music folder, or tap + to create one.")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
-                        ForEach(playlists) { playlist in
+                        ForEach(Array(playlists.enumerated()), id: \.element.id) { index, playlist in
                             NavigationLink {
-                                PlaylistDetailView(
-                                    playlist: binding(for: playlist),
-                                    library: library,
-                                    onSave: savePlaylists
-                                )
+                                PlaylistDetailView(playlist: $playlists[index], library: library)
                             } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(playlist.name)
-                                            .font(.body)
-                                        Text("\(playlist.trackIDs.count) track\(playlist.trackIDs.count == 1 ? "" : "s")")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(playlist.name)
+                                        .font(.body)
+                                    Text("\(playlist.trackURLs.count) track\(playlist.trackURLs.count == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -56,12 +56,12 @@ struct PlaylistsView: View {
                         newPlaylistName = ""
                         showNewPlaylistAlert = true
                     } label: {
-                        Image(systemName: "plus")
+                        Label("New Playlist", systemImage: "plus")
                     }
                 }
             }
             .alert("New Playlist", isPresented: $showNewPlaylistAlert) {
-                TextField("Playlist Name", text: $newPlaylistName)
+                TextField("Playlist name", text: $newPlaylistName)
                 Button("Cancel", role: .cancel) { }
                 Button("Create") {
                     createPlaylist()
@@ -71,32 +71,37 @@ struct PlaylistsView: View {
             }
         }
         .onAppear {
-            playlists = PersistenceManager.shared.loadPlaylists()
-            library = PersistenceManager.shared.loadLibrary()
+            loadPlaylists()
         }
     }
 
-    private func binding(for playlist: Playlist) -> Binding<Playlist> {
-        guard let idx = playlists.firstIndex(where: { $0.id == playlist.id }) else {
-            return .constant(playlist)
+    private func loadPlaylists() {
+        library = PersistenceManager.shared.loadLibrary()
+        guard let url = PersistenceManager.shared.loadFolderBookmark() else { return }
+        isLoading = playlists.isEmpty
+        Task {
+            let found = MetadataLoader.scanPlaylists(in: url)
+            await MainActor.run {
+                playlists = found
+                isLoading = false
+            }
         }
-        return $playlists[idx]
     }
 
     private func createPlaylist() {
         let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        let playlist = Playlist(id: UUID(), name: name, trackIDs: [])
+        guard !name.isEmpty,
+              let folderURL = PersistenceManager.shared.loadFolderBookmark() else { return }
+        let playlist = MetadataLoader.createPlaylist(name: name, in: folderURL)
         playlists.append(playlist)
-        savePlaylists()
+        playlists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private func deletePlaylists(at offsets: IndexSet) {
+        for index in offsets {
+            let playlist = playlists[index]
+            try? FileManager.default.removeItem(at: playlist.fileURL)
+        }
         playlists.remove(atOffsets: offsets)
-        savePlaylists()
-    }
-
-    private func savePlaylists() {
-        PersistenceManager.shared.savePlaylists(playlists)
     }
 }

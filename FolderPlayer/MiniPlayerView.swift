@@ -23,12 +23,23 @@ struct MiniPlayerView: View {
 
             Spacer()
 
+            Button { player.previous() } label: {
+                Image(systemName: "backward.fill")
+                    .font(.body)
+            }
+
             Button {
                 player.togglePlayPause()
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.title2)
                     .animation(.spring(), value: player.isPlaying)
+            }
+            .padding(.horizontal, 4)
+
+            Button { player.next() } label: {
+                Image(systemName: "forward.fill")
+                    .font(.body)
             }
         }
         .padding(.horizontal, 16)

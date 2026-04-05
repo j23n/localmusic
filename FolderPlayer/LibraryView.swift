@@ -7,8 +7,8 @@ struct LibraryView: View {
     @State private var showPicker = false
     @State private var folderURL: URL?
     @State private var searchText = ""
-    @State private var playlists: [Playlist] = []
     @State private var didLoadInitialData = false
+    @State private var playlists: [Playlist] = []
 
     private var filteredTracks: [Track] {
         if searchText.isEmpty { return tracks }
@@ -133,9 +133,12 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
-        .onAppear {
-            playlists = PersistenceManager.shared.loadPlaylists()
-        }
+    }
+
+    private func addTrack(_ track: Track, to playlist: Playlist) {
+        guard let idx = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
+        playlists[idx].trackURLs.append(track.url)
+        MetadataLoader.writePlaylist(playlists[idx])
     }
 
     // MARK: - Actions
@@ -148,6 +151,7 @@ struct LibraryView: View {
         }
         if let url = PersistenceManager.shared.loadFolderBookmark() {
             folderURL = url
+            playlists = MetadataLoader.scanPlaylists(in: url)
             // Always rescan — cached track URLs are from a previous session
             // and their security scope won't be valid. Rescanning produces
             // fresh URLs under the current session's security-scoped access.
@@ -174,16 +178,6 @@ struct LibraryView: View {
         }
     }
 
-    private func addTrack(_ track: Track, to playlist: Playlist) {
-        var updated = playlists
-        if let idx = updated.firstIndex(where: { $0.id == playlist.id }) {
-            if !updated[idx].trackIDs.contains(track.id) {
-                updated[idx].trackIDs.append(track.id)
-                playlists = updated
-                PersistenceManager.shared.savePlaylists(updated)
-            }
-        }
-    }
 }
 
 // MARK: - Track Row
