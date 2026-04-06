@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct FolderPlayerApp: App {
+struct LocalMusicApp: App {
     @StateObject private var player = AudioPlayerManager()
     @State private var selectedTab = 0
 

@@ -91,8 +91,8 @@ final class AudioPlayerManager: ObservableObject {
     func startAccessingFolder(_ url: URL) {
         stopAccessingCurrentFolder()
         let result = url.startAccessingSecurityScopedResource()
-        print("[FolderPlayer] startAccessingFolder: \(url.path)")
-        print("[FolderPlayer] startAccessingSecurityScopedResource returned: \(result)")
+        print("[LocalMusic] startAccessingFolder: \(url.path)")
+        print("[LocalMusic] startAccessingSecurityScopedResource returned: \(result)")
         // Store regardless of return value — `false` can mean access is
         // already cached via a sandbox extension, so files may still be readable.
         activeSecurityScopedURL = url
@@ -252,13 +252,13 @@ final class AudioPlayerManager: ObservableObject {
         statusObserver?.invalidate()
         statusObserver = nil
 
-        print("[FolderPlayer] loadAndPlay: \(track.url.path)")
-        print("[FolderPlayer] activeSecurityScopedURL: \(activeSecurityScopedURL?.path ?? "nil")")
-        print("[FolderPlayer] track URL starts with folder URL: \(activeSecurityScopedURL.map { track.url.path.hasPrefix($0.path) } ?? false)")
+        print("[LocalMusic] loadAndPlay: \(track.url.path)")
+        print("[LocalMusic] activeSecurityScopedURL: \(activeSecurityScopedURL?.path ?? "nil")")
+        print("[LocalMusic] track URL starts with folder URL: \(activeSecurityScopedURL.map { track.url.path.hasPrefix($0.path) } ?? false)")
 
         // Test if we can read the file directly
         let readable = FileManager.default.isReadableFile(atPath: track.url.path)
-        print("[FolderPlayer] FileManager.isReadableFile: \(readable)")
+        print("[LocalMusic] FileManager.isReadableFile: \(readable)")
 
         let item = AVPlayerItem(url: track.url)
 

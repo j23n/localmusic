@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000001 /* FolderPlayerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000001 /* FolderPlayerApp.swift */; };
+		A10000001 /* LocalMusicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000001 /* LocalMusicApp.swift */; };
 		A10000002 /* AudioPlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000002 /* AudioPlayerManager.swift */; };
 		A10000003 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000003 /* LibraryView.swift */; };
 		A10000004 /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000004 /* NowPlayingView.swift */; };
@@ -23,7 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B10000001 /* FolderPlayerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPlayerApp.swift; sourceTree = "<group>"; };
+		B10000001 /* LocalMusicApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMusicApp.swift; sourceTree = "<group>"; };
 		B10000002 /* AudioPlayerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerManager.swift; sourceTree = "<group>"; };
 		B10000003 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		B10000004 /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
@@ -37,7 +37,7 @@
 		B10000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000013 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		B10000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		C10000001 /* FolderPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FolderPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10000001 /* LocalMusic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalMusic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,15 +54,15 @@
 		E10000001 = {
 			isa = PBXGroup;
 			children = (
-				E10000002 /* FolderPlayer */,
+				E10000002 /* LocalMusic */,
 				E10000004 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		E10000002 /* FolderPlayer */ = {
+		E10000002 /* LocalMusic */ = {
 			isa = PBXGroup;
 			children = (
-				B10000001 /* FolderPlayerApp.swift */,
+				B10000001 /* LocalMusicApp.swift */,
 				B10000009 /* Models.swift */,
 				B10000002 /* AudioPlayerManager.swift */,
 				B10000010 /* MetadataLoader.swift */,
@@ -77,7 +77,7 @@
 				B10000014 /* Info.plist */,
 				E10000003 /* Preview Content */,
 			);
-			path = FolderPlayer;
+			path = LocalMusic;
 			sourceTree = "<group>";
 		};
 		E10000003 /* Preview Content */ = {
@@ -91,7 +91,7 @@
 		E10000004 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C10000001 /* FolderPlayer.app */,
+				C10000001 /* LocalMusic.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -99,9 +99,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F10000001 /* FolderPlayer */ = {
+		F10000001 /* LocalMusic */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = G10000003 /* Build configuration list for PBXNativeTarget "FolderPlayer" */;
+			buildConfigurationList = G10000003 /* Build configuration list for PBXNativeTarget "LocalMusic" */;
 			buildPhases = (
 				F10000002 /* Sources */,
 				D10000001 /* Frameworks */,
@@ -111,9 +111,9 @@
 			);
 			dependencies = (
 			);
-			name = FolderPlayer;
-			productName = FolderPlayer;
-			productReference = C10000001 /* FolderPlayer.app */;
+			name = LocalMusic;
+			productName = LocalMusic;
+			productReference = C10000001 /* LocalMusic.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -131,7 +131,7 @@
 					};
 				};
 			};
-			buildConfigurationList = G10000001 /* Build configuration list for PBXProject "FolderPlayer" */;
+			buildConfigurationList = G10000001 /* Build configuration list for PBXProject "LocalMusic" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -144,7 +144,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F10000001 /* FolderPlayer */,
+				F10000001 /* LocalMusic */,
 			);
 		};
 /* End PBXProject section */
@@ -166,7 +166,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000001 /* FolderPlayerApp.swift in Sources */,
+				A10000001 /* LocalMusicApp.swift in Sources */,
 				A10000002 /* AudioPlayerManager.swift in Sources */,
 				A10000003 /* LibraryView.swift in Sources */,
 				A10000004 /* NowPlayingView.swift in Sources */,
@@ -252,11 +252,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"FolderPlayer/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"LocalMusic/Preview Content\"";
 				DEVELOPMENT_TEAM = HN22UT76EY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = FolderPlayer/Info.plist;
+				INFOPLIST_FILE = LocalMusic/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LocalMusic;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -339,11 +339,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"FolderPlayer/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"LocalMusic/Preview Content\"";
 				DEVELOPMENT_TEAM = HN22UT76EY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = FolderPlayer/Info.plist;
+				INFOPLIST_FILE = LocalMusic/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LocalMusic;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -367,7 +367,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		G10000001 /* Build configuration list for PBXProject "FolderPlayer" */ = {
+		G10000001 /* Build configuration list for PBXProject "LocalMusic" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				G10000002 /* Debug */,
@@ -376,7 +376,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		G10000003 /* Build configuration list for PBXNativeTarget "FolderPlayer" */ = {
+		G10000003 /* Build configuration list for PBXNativeTarget "LocalMusic" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				G10000004 /* Debug */,

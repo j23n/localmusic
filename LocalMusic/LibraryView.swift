@@ -198,7 +198,7 @@ struct LibraryView: View {
                 tracks = scanned
                 PersistenceManager.shared.saveLibrary(scanned)
             } else {
-                print("[FolderPlayer] Rescan returned 0 tracks, keeping cached data")
+                print("[LocalMusic] Rescan returned 0 tracks, keeping cached data")
             }
             playlists = MetadataLoader.scanPlaylists(in: url)
             isLoading = false

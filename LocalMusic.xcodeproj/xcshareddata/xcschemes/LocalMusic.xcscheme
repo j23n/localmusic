@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "F10000001"
-               BuildableName = "FolderPlayer.app"
-               BlueprintName = "FolderPlayer"
-               ReferencedContainer = "container:FolderPlayer.xcodeproj">
+               BuildableName = "LocalMusic.app"
+               BlueprintName = "LocalMusic"
+               ReferencedContainer = "container:LocalMusic.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -44,9 +44,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F10000001"
-            BuildableName = "FolderPlayer.app"
-            BlueprintName = "FolderPlayer"
-            ReferencedContainer = "container:FolderPlayer.xcodeproj">
+            BuildableName = "LocalMusic.app"
+            BlueprintName = "LocalMusic"
+            ReferencedContainer = "container:LocalMusic.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -61,9 +61,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F10000001"
-            BuildableName = "FolderPlayer.app"
-            BlueprintName = "FolderPlayer"
-            ReferencedContainer = "container:FolderPlayer.xcodeproj">
+            BuildableName = "LocalMusic.app"
+            BlueprintName = "LocalMusic"
+            ReferencedContainer = "container:LocalMusic.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

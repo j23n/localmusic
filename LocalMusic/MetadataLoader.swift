@@ -15,11 +15,11 @@ struct MetadataLoader {
 
     /// Caller must ensure security-scoped access is already active on `url`.
     static func scanFolder(at url: URL) async -> [Track] {
-        print("[FolderPlayer] scanFolder at: \(url.path)")
+        print("[LocalMusic] scanFolder at: \(url.path)")
         let audioURLs = collectAudioFiles(in: url)
-        print("[FolderPlayer] found \(audioURLs.count) audio files")
+        print("[LocalMusic] found \(audioURLs.count) audio files")
         if let first = audioURLs.first {
-            print("[FolderPlayer] first file URL: \(first.path)")
+            print("[LocalMusic] first file URL: \(first.path)")
         }
 
         var tracks: [Track] = []
