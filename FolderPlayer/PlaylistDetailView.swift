@@ -14,15 +14,20 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         Group {
-            if resolvedTracks.isEmpty {
+            if resolvedTracks.isEmpty && playlist.trackURLs.isEmpty {
                 VStack(spacing: 16) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.secondary)
-                    Text("No Matching Tracks")
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.accentColor.opacity(0.12))
+                            .frame(width: 100, height: 100)
+                        Image(systemName: "music.note")
+                            .font(.system(size: 40))
+                            .foregroundColor(Color.accentColor)
+                    }
+                    Text("Empty Playlist")
                         .font(.title3)
                         .fontWeight(.medium)
-                    Text("None of the paths in this playlist could be resolved to tracks in your library.")
+                    Text("Tap + to add tracks from your library.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -31,24 +36,41 @@ struct PlaylistDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    Section {
-                        Button {
-                            if let first = resolvedTracks.first {
-                                player.play(track: first, queue: resolvedTracks, startIndex: 0)
+                    // Play button
+                    if !resolvedTracks.isEmpty {
+                        Section {
+                            Button {
+                                if let first = resolvedTracks.first {
+                                    player.play(track: first, queue: resolvedTracks, startIndex: 0)
+                                }
+                            } label: {
+                                HStack {
+                                    Spacer()
+                                    Label("Play All", systemImage: "play.fill")
+                                        .font(.callout)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 10)
+                                .background(Color.accentColor, in: Capsule())
                             }
-                        } label: {
-                            Label("Play", systemImage: "play.fill")
-                                .font(.headline)
+                            .buttonStyle(.plain)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
                         }
                     }
 
+                    // Track list
                     Section {
                         ForEach(Array(resolvedTracks.enumerated()), id: \.element.id) { index, track in
                             Button {
                                 player.play(track: track, queue: resolvedTracks, startIndex: index)
                             } label: {
-                                TrackRow(track: track)
+                                TrackRow(track: track,
+                                         isPlaying: player.currentTrack?.url == track.url)
                             }
+                            .listRowSeparator(.hidden)
                         }
                         .onMove { from, to in
                             playlist.trackURLs.move(fromOffsets: from, toOffset: to)
@@ -57,6 +79,15 @@ struct PlaylistDetailView: View {
                         .onDelete { offsets in
                             playlist.trackURLs.remove(atOffsets: offsets)
                             MetadataLoader.writePlaylist(playlist)
+                        }
+                    } header: {
+                        if !resolvedTracks.isEmpty {
+                            Text("\(resolvedTracks.count) track\(resolvedTracks.count == 1 ? "" : "s")")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -120,11 +151,12 @@ struct AddTracksSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: included ? "checkmark.circle.fill" : "circle")
                                 .font(.title3)
-                                .foregroundColor(included ? .accentColor : .secondary)
+                                .foregroundColor(included ? Color.accentColor : .secondary)
 
                             TrackRow(track: track)
                         }
                     }
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)

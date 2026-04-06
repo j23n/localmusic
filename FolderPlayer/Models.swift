@@ -8,6 +8,14 @@ enum RepeatMode: String, Codable, CaseIterable {
     case one
 }
 
+// MARK: - Synced Lyric Line
+
+struct SyncedLyricLine: Identifiable, Codable, Hashable {
+    var id: Double { timestamp }
+    let timestamp: Double // seconds
+    let text: String
+}
+
 // MARK: - Track
 
 struct Track: Identifiable, Codable, Hashable {
@@ -18,6 +26,12 @@ struct Track: Identifiable, Codable, Hashable {
     var album: String
     var duration: Double
     var artworkData: Data?
+    var lyrics: String?
+    var syncedLyrics: [SyncedLyricLine]?
+
+    var hasLyrics: Bool {
+        lyrics != nil || syncedLyrics != nil
+    }
 
     static func == (lhs: Track, rhs: Track) -> Bool {
         lhs.id == rhs.id

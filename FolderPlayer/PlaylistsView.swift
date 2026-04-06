@@ -16,9 +16,14 @@ struct PlaylistsView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if playlists.isEmpty {
                     VStack(spacing: 16) {
-                        Image(systemName: "rectangle.stack")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.accentColor.opacity(0.12))
+                                .frame(width: 100, height: 100)
+                            Image(systemName: "rectangle.stack")
+                                .font(.system(size: 40))
+                                .foregroundColor(Color.accentColor)
+                        }
                         Text("No Playlists Found")
                             .font(.title3)
                             .fontWeight(.medium)
@@ -35,14 +40,26 @@ struct PlaylistsView: View {
                             NavigationLink {
                                 PlaylistDetailView(playlist: $playlists[index], library: library)
                             } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(playlist.name)
-                                        .font(.body)
-                                    Text("\(playlist.trackURLs.count) track\(playlist.trackURLs.count == 1 ? "" : "s")")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                HStack(spacing: 14) {
+                                    PlaylistMosaicView(
+                                        trackURLs: playlist.trackURLs,
+                                        library: library
+                                    )
+                                    .frame(width: 52, height: 52)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(playlist.name)
+                                            .font(.callout)
+                                            .fontWeight(.medium)
+                                        Text("\(playlist.trackURLs.count) track\(playlist.trackURLs.count == 1 ? "" : "s")")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+                                .padding(.vertical, 4)
                             }
+                            .listRowSeparator(.hidden)
                         }
                         .onDelete(perform: deletePlaylists)
                     }
@@ -50,6 +67,9 @@ struct PlaylistsView: View {
                 }
             }
             .navigationTitle("Playlists")
+            .refreshable {
+                await refreshPlaylists()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -88,6 +108,13 @@ struct PlaylistsView: View {
         }
     }
 
+    private func refreshPlaylists() async {
+        library = PersistenceManager.shared.loadLibrary()
+        guard let url = PersistenceManager.shared.loadFolderBookmark() else { return }
+        let found = MetadataLoader.scanPlaylists(in: url)
+        playlists = found
+    }
+
     private func createPlaylist() {
         let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty,
@@ -103,5 +130,73 @@ struct PlaylistsView: View {
             try? FileManager.default.removeItem(at: playlist.fileURL)
         }
         playlists.remove(atOffsets: offsets)
+    }
+}
+
+// MARK: - Playlist Mosaic Thumbnail
+
+struct PlaylistMosaicView: View {
+    let trackURLs: [URL]
+    let library: [Track]
+
+    private var artworkImages: [Data] {
+        var images: [Data] = []
+        for url in trackURLs {
+            if images.count >= 4 { break }
+            if let track = library.first(where: { $0.url.standardized == url.standardized }),
+               let data = track.artworkData {
+                images.append(data)
+            }
+        }
+        return images
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let half = geo.size.width / 2
+            if artworkImages.isEmpty {
+                ZStack {
+                    Color(white: 0.85).opacity(0.5)
+                    Image(systemName: "music.note.list")
+                        .font(.body)
+                        .foregroundStyle(Color(white: 0.55))
+                }
+            } else if artworkImages.count == 1 {
+                artworkImage(artworkImages[0])
+            } else {
+                let grid = padded(artworkImages, to: 4)
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        artworkImage(grid[0]).frame(width: half, height: half)
+                        artworkImage(grid[1]).frame(width: half, height: half)
+                    }
+                    HStack(spacing: 0) {
+                        artworkImage(grid[2]).frame(width: half, height: half)
+                        artworkImage(grid[3]).frame(width: half, height: half)
+                    }
+                }
+            }
+        }
+    }
+
+    private func artworkImage(_ data: Data?) -> some View {
+        Group {
+            if let data, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color(white: 0.85).opacity(0.5)
+            }
+        }
+        .clipped()
+    }
+
+    private func padded(_ images: [Data], to count: Int) -> [Data?] {
+        var result: [Data?] = images.map { $0 }
+        while result.count < count {
+            result.append(nil)
+        }
+        return result
     }
 }

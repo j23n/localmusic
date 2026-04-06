@@ -46,8 +46,6 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showPicker) {
                 DocumentPicker { pickerURL in
-                    // Start security-scoped access BEFORE creating bookmark —
-                    // the scope token must be active for it to be embedded in the bookmark data.
                     _ = pickerURL.startAccessingSecurityScopedResource()
                     PersistenceManager.shared.saveFolderBookmark(pickerURL)
                     pickerURL.stopAccessingSecurityScopedResource()
@@ -59,6 +57,11 @@ struct LibraryView: View {
                 }
             }
             .searchable(text: $searchText, prompt: "Search by title, artist, or album")
+            .refreshable {
+                if let url = folderURL {
+                    await rescan(url)
+                }
+            }
         }
         .onAppear {
             guard !didLoadInitialData else { return }
@@ -71,9 +74,14 @@ struct LibraryView: View {
 
     private var onboardingView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 40))
+                    .foregroundColor(Color.accentColor)
+            }
             Text("No Music Folder Selected")
                 .font(.title2)
                 .fontWeight(.semibold)
@@ -95,9 +103,14 @@ struct LibraryView: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "music.note")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "music.note")
+                    .font(.system(size: 40))
+                    .foregroundColor(Color.accentColor)
+            }
             Text("No Audio Files Found")
                 .font(.title3)
                 .fontWeight(.medium)
@@ -111,24 +124,39 @@ struct LibraryView: View {
     }
 
     private var trackListView: some View {
-        List(filteredTracks) { track in
-            Button {
-                let list = filteredTracks
-                if let idx = list.firstIndex(where: { $0.id == track.id }) {
-                    player.play(track: track, queue: list, startIndex: idx)
-                }
-            } label: {
-                TrackRow(track: track)
-            }
-            .contextMenu {
-                if !playlists.isEmpty {
-                    Menu("Add to Playlist") {
-                        ForEach(playlists) { playlist in
-                            Button(playlist.name) {
-                                addTrack(track, to: playlist)
+        List {
+            Section {
+                ForEach(filteredTracks) { track in
+                    Button {
+                        let list = filteredTracks
+                        if let idx = list.firstIndex(where: { $0.id == track.id }) {
+                            player.play(track: track, queue: list, startIndex: idx)
+                        }
+                    } label: {
+                        TrackRow(track: track,
+                                 isPlaying: player.currentTrack?.url == track.url)
+                    }
+                    .contextMenu {
+                        if !playlists.isEmpty {
+                            Menu("Add to Playlist") {
+                                ForEach(playlists) { playlist in
+                                    Button(playlist.name) {
+                                        addTrack(track, to: playlist)
+                                    }
+                                }
                             }
                         }
                     }
+                    .listRowSeparator(.hidden)
+                }
+            } header: {
+                if !filteredTracks.isEmpty {
+                    Text("\(filteredTracks.count) track\(filteredTracks.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -146,15 +174,11 @@ struct LibraryView: View {
     private func loadCachedData() {
         let cached = PersistenceManager.shared.loadLibrary()
         if !cached.isEmpty {
-            // Show cached tracks immediately while rescan happens
             tracks = cached
         }
         if let url = PersistenceManager.shared.loadFolderBookmark() {
             folderURL = url
             playlists = MetadataLoader.scanPlaylists(in: url)
-            // Always rescan — cached track URLs are from a previous session
-            // and their security scope won't be valid. Rescanning produces
-            // fresh URLs under the current session's security-scoped access.
             scanFolder(url)
         }
     }
@@ -162,19 +186,22 @@ struct LibraryView: View {
     private func scanFolder(_ url: URL) {
         isLoading = tracks.isEmpty
         Task {
-            // Start security-scoped access — keep it open for the lifetime
-            // of this folder so playback can access the files.
-            player.startAccessingFolder(url)
-            let scanned = await MetadataLoader.scanFolder(at: url)
-            await MainActor.run {
-                if !scanned.isEmpty {
-                    tracks = scanned
-                    PersistenceManager.shared.saveLibrary(scanned)
-                } else {
-                    print("[FolderPlayer] Rescan returned 0 tracks, keeping cached data")
-                }
-                isLoading = false
+            await rescan(url)
+        }
+    }
+
+    private func rescan(_ url: URL) async {
+        player.startAccessingFolder(url)
+        let scanned = await MetadataLoader.scanFolder(at: url)
+        await MainActor.run {
+            if !scanned.isEmpty {
+                tracks = scanned
+                PersistenceManager.shared.saveLibrary(scanned)
+            } else {
+                print("[FolderPlayer] Rescan returned 0 tracks, keeping cached data")
             }
+            playlists = MetadataLoader.scanPlaylists(in: url)
+            isLoading = false
         }
     }
 
@@ -184,18 +211,30 @@ struct LibraryView: View {
 
 struct TrackRow: View {
     let track: Track
+    var isPlaying: Bool = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            artworkView
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+        HStack(spacing: 14) {
+            ZStack {
+                artworkView
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            VStack(alignment: .leading, spacing: 2) {
+                if isPlaying {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.black.opacity(0.4))
+                        .frame(width: 52, height: 52)
+                    NowPlayingBars()
+                        .frame(width: 16, height: 14)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
                 Text(track.title)
-                    .font(.body)
+                    .font(.callout)
+                    .fontWeight(.medium)
                     .lineLimit(1)
-                    .foregroundStyle(.primary)
+                    .foregroundColor(isPlaying ? Color.accentColor : .primary)
                 Text(track.artist)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -209,6 +248,7 @@ struct TrackRow: View {
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
         }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -220,10 +260,10 @@ struct TrackRow: View {
                 .aspectRatio(contentMode: .fill)
         } else {
             ZStack {
-                Color.gray.opacity(0.3)
+                Color(white: 0.85).opacity(0.5)
                 Image(systemName: "music.note")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.body)
+                    .foregroundStyle(Color(white: 0.55))
             }
         }
     }
@@ -233,5 +273,33 @@ struct TrackRow: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
+    }
+}
+
+// MARK: - Now Playing Bars Animation
+
+struct NowPlayingBars: View {
+    @State private var animating = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            bar(delay: 0.0)
+            bar(delay: 0.2)
+            bar(delay: 0.4)
+        }
+        .onAppear { animating = true }
+    }
+
+    private func bar(delay: Double) -> some View {
+        RoundedRectangle(cornerRadius: 1)
+            .fill(.white)
+            .frame(width: 3)
+            .scaleEffect(y: animating ? 1.0 : 0.3, anchor: .bottom)
+            .animation(
+                .easeInOut(duration: 0.5)
+                .repeatForever(autoreverses: true)
+                .delay(delay),
+                value: animating
+            )
     }
 }
