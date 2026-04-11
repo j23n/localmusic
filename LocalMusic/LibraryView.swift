@@ -4,7 +4,7 @@ struct LibraryView: View {
     @EnvironmentObject private var player: AudioPlayerManager
     @State private var tracks: [Track] = []
     @State private var isLoading = false
-    @State private var showPicker = false
+    @State private var showSettings = false
     @State private var folderURL: URL?
     @State private var searchText = ""
     @State private var didLoadInitialData = false
@@ -38,23 +38,23 @@ struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showPicker = true
+                        showSettings = true
                     } label: {
-                        Label("Choose Folder", systemImage: "folder.badge.plus")
+                        Image(systemName: "gear")
                     }
                 }
             }
-            .sheet(isPresented: $showPicker) {
-                DocumentPicker { pickerURL in
-                    _ = pickerURL.startAccessingSecurityScopedResource()
-                    PersistenceManager.shared.saveFolderBookmark(pickerURL)
-                    pickerURL.stopAccessingSecurityScopedResource()
-
-                    if let resolvedURL = PersistenceManager.shared.loadFolderBookmark() {
-                        folderURL = resolvedURL
-                        scanFolder(resolvedURL)
+            .sheet(isPresented: $showSettings) {
+                SettingsView(
+                    folderURL: $folderURL,
+                    trackCount: tracks.count,
+                    playlistCount: playlists.count,
+                    onRescan: {
+                        if let url = folderURL {
+                            scanFolder(url)
+                        }
                     }
-                }
+                )
             }
             .searchable(text: $searchText, prompt: "Search by title, artist, or album")
             .refreshable {
@@ -91,9 +91,9 @@ struct LibraryView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             Button {
-                showPicker = true
+                showSettings = true
             } label: {
-                Label("Choose Folder", systemImage: "folder")
+                Label("Get Started", systemImage: "gear")
                     .font(.headline)
             }
             .buttonStyle(.borderedProminent)
@@ -197,6 +197,7 @@ struct LibraryView: View {
             if !scanned.isEmpty {
                 tracks = scanned
                 PersistenceManager.shared.saveLibrary(scanned)
+                PersistenceManager.shared.saveLastSynced(Date())
             } else {
                 print("[LocalMusic] Rescan returned 0 tracks, keeping cached data")
             }

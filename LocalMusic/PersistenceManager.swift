@@ -49,6 +49,16 @@ final class PersistenceManager {
         }
     }
 
+    // MARK: - Last Synced
+
+    func saveLastSynced(_ date: Date) {
+        UserDefaults.standard.set(date, forKey: "lastSynced")
+    }
+
+    func loadLastSynced() -> Date? {
+        UserDefaults.standard.object(forKey: "lastSynced") as? Date
+    }
+
     // MARK: - Library
 
     func saveLibrary(_ tracks: [Track]) {
