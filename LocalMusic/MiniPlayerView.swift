@@ -61,7 +61,7 @@ struct MiniPlayerView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(.bar, in: RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
         .padding(.horizontal, 12)
         .padding(.bottom, 4)

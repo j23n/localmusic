@@ -156,11 +156,13 @@ struct LibraryView: View {
                         .fontWeight(.medium)
                         .textCase(.uppercase)
                         .tracking(0.5)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
+                        .padding(.top, 8)
                 }
             }
         }
         .listStyle(.plain)
+        .contentMargins(.bottom, 80, for: .scrollContent)
     }
 
     private func addTrack(_ track: Track, to playlist: Playlist) {

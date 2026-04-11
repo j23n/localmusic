@@ -87,11 +87,13 @@ struct PlaylistDetailView: View {
                                 .fontWeight(.medium)
                                 .textCase(.uppercase)
                                 .tracking(0.5)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.primary)
+                                .padding(.top, 8)
                         }
                     }
                 }
                 .listStyle(.plain)
+                .contentMargins(.bottom, 80, for: .scrollContent)
             }
         }
         .navigationTitle(playlist.name)
