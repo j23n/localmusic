@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="220" viewBox="0 0 360 220">
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="360" height="220" fill="#ffffff"/>
+
+  <text x="180" y="18" text-anchor="middle" font-family="-apple-system, SF Pro, Helvetica" font-size="11" font-weight="600" fill="#8e8e93" letter-spacing="0.5">BEFORE</text>
+
+  <!-- Song rows -->
+  <g font-family="-apple-system, SF Pro, Helvetica">
+    <rect x="20" y="28" width="44" height="44" rx="8" fill="#d1d1d6"/>
+    <text x="74" y="46" font-size="15" font-weight="500" fill="#1c1c1e">Second to Last Song</text>
+    <text x="74" y="62" font-size="12" fill="#8e8e93">Artist Name</text>
+    <text x="330" y="54" font-size="12" fill="#c7c7cc">3:15</text>
+
+    <!-- Last song - partially hidden -->
+    <rect x="20" y="80" width="44" height="44" rx="8" fill="#d1d1d6"/>
+    <text x="74" y="98" font-size="15" font-weight="500" fill="#1c1c1e">Last Song</text>
+    <text x="74" y="114" font-size="12" fill="#8e8e93">Artist Name</text>
+    <text x="330" y="106" font-size="12" fill="#c7c7cc">4:33</text>
+  </g>
+
+  <!-- Mini player overlapping the last song -->
+  <g filter="url(#shadow)">
+    <rect x="12" y="108" width="336" height="68" rx="14" fill="#f2f2f7" opacity="0.94"/>
+  </g>
+  <rect x="16" y="108" width="120" height="2" rx="1" fill="#007AFF"/>
+  <rect x="32" y="120" width="48" height="48" rx="10" fill="#c7c7cc"/>
+  <text x="92" y="140" font-family="-apple-system, SF Pro, Helvetica" font-size="14" font-weight="500" fill="#1c1c1e">Now Playing Track</text>
+  <text x="92" y="156" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#8e8e93">Artist</text>
+
+  <!-- Tab bar -->
+  <rect x="0" y="180" width="360" height="28" fill="#f2f2f7" opacity="0.94"/>
+  <line x1="0" y1="180" x2="360" y2="180" stroke="#c6c6c8" stroke-width="0.5"/>
+  <text x="60" y="198" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#007AFF">Library</text>
+  <text x="180" y="198" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#8e8e93">Now Playing</text>
+  <text x="300" y="198" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#8e8e93">Playlists</text>
+
+  <!-- Annotation: overlap area -->
+  <rect x="14" y="80" width="332" height="44" rx="4" fill="#FF3B30" opacity="0.12"/>
+  <text x="180" y="215" text-anchor="middle" font-family="-apple-system" font-size="9" font-weight="600" fill="#FF3B30">Last song is hidden behind the mini-player</text>
+</svg>
