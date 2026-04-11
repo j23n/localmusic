@@ -11,8 +11,12 @@ final class AudioPlayerManager: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
-    @Published var shuffleEnabled: Bool = false
-    @Published var repeatMode: RepeatMode = .off
+    @Published var shuffleEnabled: Bool = false {
+        didSet { UserDefaults.standard.set(shuffleEnabled, forKey: "shuffleEnabled") }
+    }
+    @Published var repeatMode: RepeatMode = .off {
+        didSet { UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode") }
+    }
     @Published var currentQueue: [Track] = []
     @Published var currentIndex: Int = 0
 
@@ -28,6 +32,11 @@ final class AudioPlayerManager: ObservableObject {
     // MARK: - Init
 
     init() {
+        shuffleEnabled = UserDefaults.standard.bool(forKey: "shuffleEnabled")
+        if let raw = UserDefaults.standard.string(forKey: "repeatMode"),
+           let mode = RepeatMode(rawValue: raw) {
+            repeatMode = mode
+        }
         configureAudioSession()
         configureRemoteCommands()
     }

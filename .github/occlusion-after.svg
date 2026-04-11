@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260">
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="360" height="260" fill="#ffffff"/>
+
+  <text x="180" y="18" text-anchor="middle" font-family="-apple-system, SF Pro, Helvetica" font-size="11" font-weight="600" fill="#34C759" letter-spacing="0.5">AFTER</text>
+
+  <!-- Song rows -->
+  <g font-family="-apple-system, SF Pro, Helvetica">
+    <rect x="20" y="28" width="44" height="44" rx="8" fill="#d1d1d6"/>
+    <text x="74" y="46" font-size="15" font-weight="500" fill="#1c1c1e">Second to Last Song</text>
+    <text x="74" y="62" font-size="12" fill="#8e8e93">Artist Name</text>
+    <text x="330" y="54" font-size="12" fill="#c7c7cc">3:15</text>
+
+    <!-- Last song - fully visible -->
+    <rect x="20" y="80" width="44" height="44" rx="8" fill="#d1d1d6"/>
+    <text x="74" y="98" font-size="15" font-weight="500" fill="#1c1c1e">Last Song</text>
+    <text x="74" y="114" font-size="12" fill="#8e8e93">Artist Name</text>
+    <text x="330" y="106" font-size="12" fill="#c7c7cc">4:33</text>
+  </g>
+
+  <!-- 80pt bottom margin gap -->
+  <rect x="20" y="130" width="320" height="20" fill="none"/>
+  <text x="180" y="143" text-anchor="middle" font-family="-apple-system" font-size="9" fill="#34C759">80pt bottom content margin</text>
+
+  <!-- Mini player - clearly below the list content -->
+  <g filter="url(#shadow)">
+    <rect x="12" y="150" width="336" height="68" rx="14" fill="#f2f2f7" opacity="0.94"/>
+    <rect x="12" y="150" width="336" height="68" rx="14" fill="white" opacity="0.6"/>
+  </g>
+  <rect x="16" y="150" width="120" height="2" rx="1" fill="#007AFF"/>
+  <rect x="32" y="162" width="48" height="48" rx="10" fill="#c7c7cc"/>
+  <text x="92" y="182" font-family="-apple-system, SF Pro, Helvetica" font-size="14" font-weight="500" fill="#1c1c1e">Now Playing Track</text>
+  <text x="92" y="198" font-family="-apple-system, SF Pro, Helvetica" font-size="12" fill="#8e8e93">Artist</text>
+
+  <!-- Tab bar -->
+  <rect x="0" y="222" width="360" height="28" fill="#f2f2f7" opacity="0.94"/>
+  <rect x="0" y="222" width="360" height="28" fill="white" opacity="0.6"/>
+  <line x1="0" y1="222" x2="360" y2="222" stroke="#c6c6c8" stroke-width="0.5"/>
+  <text x="60" y="240" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#007AFF">Library</text>
+  <text x="180" y="240" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#8e8e93">Now Playing</text>
+  <text x="300" y="240" text-anchor="middle" font-family="-apple-system" font-size="10" fill="#8e8e93">Playlists</text>
+
+  <!-- Annotation -->
+  <text x="180" y="255" text-anchor="middle" font-family="-apple-system" font-size="9" font-weight="600" fill="#34C759">Last song fully visible - scrolls clear of mini-player</text>
+</svg>

@@ -180,13 +180,25 @@ struct NowPlayingView: View {
                     Button { player.toggleShuffle() } label: {
                         Image(systemName: "shuffle")
                             .font(.body)
-                            .foregroundStyle(player.shuffleEnabled ? .primary : .secondary)
+                            .foregroundStyle(player.shuffleEnabled ? Color.accentColor : .secondary)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(player.shuffleEnabled ? Color.accentColor.opacity(0.15) : .clear)
+                            )
+                            .contentShape(Circle())
                     }
 
                     Button { player.cycleRepeatMode() } label: {
                         Image(systemName: repeatIcon)
                             .font(.body)
-                            .foregroundStyle(player.repeatMode != .off ? .primary : .secondary)
+                            .foregroundStyle(player.repeatMode != .off ? Color.accentColor : .secondary)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(player.repeatMode != .off ? Color.accentColor.opacity(0.15) : .clear)
+                            )
+                            .contentShape(Circle())
                     }
                 }
 
