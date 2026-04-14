@@ -168,6 +168,10 @@ struct LibraryView: View {
     private func addTrack(_ track: Track, to playlist: Playlist) {
         guard let idx = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
         playlists[idx].trackURLs.append(track.url)
+        let baseDir = playlists[idx].fileURL.deletingLastPathComponent()
+        playlists[idx].rawPaths.append(
+            MetadataLoader.relativePath(for: track.url, relativeTo: baseDir)
+        )
         MetadataLoader.writePlaylist(playlists[idx])
     }
 
