@@ -49,4 +49,5 @@ struct Playlist: Identifiable {
     let fileURL: URL
     let name: String
     var trackURLs: [URL]
+    var rawPaths: [String]
 }

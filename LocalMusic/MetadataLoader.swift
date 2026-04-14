@@ -314,31 +314,34 @@ struct MetadataLoader {
         let baseDir = url.deletingLastPathComponent()
         let name = url.deletingPathExtension().lastPathComponent
 
-        let trackURLs: [URL]
+        let entries: [(rawPath: String, url: URL)]
         if ext == "pls" {
-            trackURLs = parsePLS(content, baseDir: baseDir)
+            entries = parsePLS(content, baseDir: baseDir)
         } else {
-            trackURLs = parseM3U(content, baseDir: baseDir)
+            entries = parseM3U(content, baseDir: baseDir)
         }
 
-        return Playlist(fileURL: url, name: name, trackURLs: trackURLs)
+        return Playlist(fileURL: url, name: name,
+                        trackURLs: entries.map(\.url),
+                        rawPaths: entries.map(\.rawPath))
     }
 
-    private static func parseM3U(_ content: String, baseDir: URL) -> [URL] {
+    private static func parseM3U(_ content: String, baseDir: URL) -> [(rawPath: String, url: URL)] {
         let lines = content.components(separatedBy: .newlines)
-        var urls: [URL] = []
+        var entries: [(rawPath: String, url: URL)] = []
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
-            let resolved = resolveTrackPath(trimmed, baseDir: baseDir)
-            if let resolved { urls.append(resolved) }
+            if let resolved = resolveTrackPath(trimmed, baseDir: baseDir) {
+                entries.append((trimmed, resolved))
+            }
         }
-        return urls
+        return entries
     }
 
-    private static func parsePLS(_ content: String, baseDir: URL) -> [URL] {
+    private static func parsePLS(_ content: String, baseDir: URL) -> [(rawPath: String, url: URL)] {
         let lines = content.components(separatedBy: .newlines)
-        var urls: [URL] = []
+        var entries: [(rawPath: String, url: URL)] = []
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Match File1=..., File2=..., etc.
@@ -346,10 +349,11 @@ struct MetadataLoader {
             guard let eqIndex = trimmed.firstIndex(of: "=") else { continue }
             let path = String(trimmed[trimmed.index(after: eqIndex)...])
                 .trimmingCharacters(in: .whitespaces)
-            let resolved = resolveTrackPath(path, baseDir: baseDir)
-            if let resolved { urls.append(resolved) }
+            if let resolved = resolveTrackPath(path, baseDir: baseDir) {
+                entries.append((path, resolved))
+            }
         }
-        return urls
+        return entries
     }
 
     static func resolveTrackPath(_ path: String, baseDir: URL) -> URL? {
@@ -387,13 +391,13 @@ struct MetadataLoader {
 
     static func createPlaylist(name: String, in directory: URL) -> Playlist {
         let fileURL = directory.appendingPathComponent("\(name).m3u")
-        let playlist = Playlist(fileURL: fileURL, name: name, trackURLs: [])
+        let playlist = Playlist(fileURL: fileURL, name: name, trackURLs: [], rawPaths: [])
         let content = "#EXTM3U\n"
         try? content.write(to: fileURL, atomically: true, encoding: .utf8)
         return playlist
     }
 
-    private static func relativePath(for trackURL: URL, relativeTo baseDir: URL) -> String {
+    static func relativePath(for trackURL: URL, relativeTo baseDir: URL) -> String {
         let trackPath = trackURL.standardized.path
         let basePath = baseDir.standardized.path.hasSuffix("/")
             ? baseDir.standardized.path

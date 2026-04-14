@@ -1,5 +1,19 @@
 import SwiftUI
 
+// MARK: - Playlist Item (resolved track or missing file)
+
+private enum PlaylistItem: Identifiable {
+    case resolved(index: Int, track: Track)
+    case missing(index: Int, rawPath: String)
+
+    var id: String {
+        switch self {
+        case .resolved(let index, _): return "r-\(index)"
+        case .missing(let index, _): return "m-\(index)"
+        }
+    }
+}
+
 struct PlaylistDetailView: View {
     @Binding var playlist: Playlist
     let library: [Track]
@@ -12,9 +26,22 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private var playlistItems: [PlaylistItem] {
+        playlist.trackURLs.enumerated().map { index, url in
+            if let track = library.first(where: { $0.url.standardized == url.standardized }) {
+                return .resolved(index: index, track: track)
+            } else {
+                let rawPath = index < playlist.rawPaths.count
+                    ? playlist.rawPaths[index]
+                    : url.path
+                return .missing(index: index, rawPath: rawPath)
+            }
+        }
+    }
+
     var body: some View {
         Group {
-            if resolvedTracks.isEmpty && playlist.trackURLs.isEmpty {
+            if playlist.trackURLs.isEmpty {
                 VStack(spacing: 16) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 20)
@@ -63,32 +90,56 @@ struct PlaylistDetailView: View {
 
                     // Track list
                     Section {
-                        ForEach(Array(resolvedTracks.enumerated()), id: \.element.id) { index, track in
-                            Button {
-                                player.play(track: track, queue: resolvedTracks, startIndex: index)
-                            } label: {
-                                TrackRow(track: track,
-                                         isPlaying: player.currentTrack?.url == track.url)
+                        ForEach(playlistItems) { item in
+                            switch item {
+                            case .resolved(_, let track):
+                                Button {
+                                    let queue = resolvedTracks
+                                    if let playIndex = queue.firstIndex(where: { $0.url.standardized == track.url.standardized }) {
+                                        player.play(track: track, queue: queue, startIndex: playIndex)
+                                    }
+                                } label: {
+                                    TrackRow(track: track,
+                                             isPlaying: player.currentTrack?.url == track.url)
+                                }
+                                .listRowSeparator(.hidden)
+                            case .missing(_, let rawPath):
+                                MissingTrackRow(rawPath: rawPath)
+                                    .listRowSeparator(.hidden)
                             }
-                            .listRowSeparator(.hidden)
                         }
                         .onMove { from, to in
                             playlist.trackURLs.move(fromOffsets: from, toOffset: to)
+                            playlist.rawPaths.move(fromOffsets: from, toOffset: to)
                             MetadataLoader.writePlaylist(playlist)
                         }
                         .onDelete { offsets in
                             playlist.trackURLs.remove(atOffsets: offsets)
+                            playlist.rawPaths.remove(atOffsets: offsets)
                             MetadataLoader.writePlaylist(playlist)
                         }
                     } header: {
-                        if !resolvedTracks.isEmpty {
-                            Text("\(resolvedTracks.count) track\(resolvedTracks.count == 1 ? "" : "s")")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .textCase(.uppercase)
-                                .tracking(0.5)
-                                .foregroundStyle(.primary)
-                                .padding(.top, 8)
+                        if !playlistItems.isEmpty {
+                            let missing = playlistItems.filter {
+                                if case .missing = $0 { return true }; return false
+                            }.count
+                            if missing > 0 {
+                                Text("\(resolvedTracks.count) track\(resolvedTracks.count == 1 ? "" : "s"), \(missing) missing")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
+                                    .foregroundStyle(.primary)
+                                    .padding(.top, 8)
+                            } else if !resolvedTracks.isEmpty {
+                                Text("\(resolvedTracks.count) track\(resolvedTracks.count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
+                                    .foregroundStyle(.primary)
+                                    .padding(.top, 8)
+                            }
                         }
                     }
                 }
@@ -112,6 +163,36 @@ struct PlaylistDetailView: View {
         .sheet(isPresented: $showAddTracks) {
             AddTracksSheet(playlist: $playlist, library: library)
         }
+    }
+}
+
+// MARK: - Missing Track Row
+
+struct MissingTrackRow: View {
+    let rawPath: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.orange.opacity(0.15))
+                    .frame(width: 52, height: 52)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(rawPath)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("File not found")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -144,9 +225,19 @@ struct AddTracksSheet: View {
                     let included = isInPlaylist(track)
                     Button {
                         if included {
-                            playlist.trackURLs.removeAll { $0.standardized == track.url.standardized }
+                            let indices = playlist.trackURLs.enumerated()
+                                .filter { $0.element.standardized == track.url.standardized }
+                                .map(\.offset)
+                            for index in indices.reversed() {
+                                playlist.trackURLs.remove(at: index)
+                                playlist.rawPaths.remove(at: index)
+                            }
                         } else {
                             playlist.trackURLs.append(track.url)
+                            let baseDir = playlist.fileURL.deletingLastPathComponent()
+                            playlist.rawPaths.append(
+                                MetadataLoader.relativePath(for: track.url, relativeTo: baseDir)
+                            )
                         }
                         MetadataLoader.writePlaylist(playlist)
                     } label: {
