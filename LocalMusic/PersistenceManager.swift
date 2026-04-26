@@ -7,13 +7,24 @@ final class PersistenceManager {
     private let fileManager = FileManager.default
     private let ioQueue = DispatchQueue(label: "com.folderplayer.persistence",
                                         qos: .userInitiated)
+    private let documentsURL: URL
+    private let defaults: UserDefaults
 
-    private var documentsDirectory: URL {
-        fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    /// Default initializer points at the real `Documents/` and
+    /// `UserDefaults.standard`. Tests inject a temp directory and a private
+    /// suite to keep state isolated.
+    init(documentsURL: URL? = nil, userDefaults: UserDefaults = .standard) {
+        if let documentsURL {
+            self.documentsURL = documentsURL
+        } else {
+            self.documentsURL = FileManager.default
+                .urls(for: .documentDirectory, in: .userDomainMask)[0]
+        }
+        self.defaults = userDefaults
     }
 
     private var libraryURL: URL {
-        documentsDirectory.appendingPathComponent("library.json")
+        documentsURL.appendingPathComponent("library.json")
     }
 
     // MARK: - Folder Bookmark
@@ -25,14 +36,14 @@ final class PersistenceManager {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            UserDefaults.standard.set(bookmarkData, forKey: "folderBookmark")
+            defaults.set(bookmarkData, forKey: "folderBookmark")
         } catch {
             print("Failed to save folder bookmark: \(error)")
         }
     }
 
     func loadFolderBookmark() -> URL? {
-        guard let data = UserDefaults.standard.data(forKey: "folderBookmark") else { return nil }
+        guard let data = defaults.data(forKey: "folderBookmark") else { return nil }
         var isStale = false
         do {
             let url = try URL(
@@ -54,11 +65,11 @@ final class PersistenceManager {
     // MARK: - Last Synced
 
     func saveLastSynced(_ date: Date) {
-        UserDefaults.standard.set(date, forKey: "lastSynced")
+        defaults.set(date, forKey: "lastSynced")
     }
 
     func loadLastSynced() -> Date? {
-        UserDefaults.standard.object(forKey: "lastSynced") as? Date
+        defaults.object(forKey: "lastSynced") as? Date
     }
 
     // MARK: - Library

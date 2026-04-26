@@ -273,6 +273,28 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Test-only: replaces the in-memory library and waits for the display
+    /// pipeline to settle. Skips disk I/O so tests stay fast and isolated.
+    func _testSeedTracks(_ tracks: [Track]) async {
+        await ingest(tracks: tracks, persist: false)
+        await applyTask?.value
+    }
+
+    /// Test-only: awaits the most recent filter/sort/section task. Useful
+    /// after mutating `searchText` or `sortOption` to assert on
+    /// `displayTracks` / `sections` without sleeping.
+    func _testWaitForApply() async {
+        await applyTask?.value
+    }
+
+    /// Test-only: assigns `folderURL` directly so playlist CRUD tests can
+    /// run against a temp directory.
+    func _testSetFolderURL(_ url: URL?) {
+        folderURL = url
+    }
+    #endif
+
     /// Filters, sorts, and pre-computes sections in a single detached task so
     /// large libraries don't block the main thread.
     ///
