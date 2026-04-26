@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct LocalMusicApp: App {
     @StateObject private var player = AudioPlayerManager()
+    @StateObject private var library = LibraryStore()
     @State private var selectedTab = 0
 
     var body: some Scene {
@@ -29,6 +30,18 @@ struct LocalMusicApp: App {
                     .tag(2)
             }
             .environmentObject(player)
+            .environmentObject(library)
+            .task {
+                await library.bootstrap()
+                if let url = library.folderURL {
+                    player.startAccessingFolder(url)
+                }
+            }
+            .onChange(of: library.folderURL) { _, newValue in
+                if let url = newValue {
+                    player.startAccessingFolder(url)
+                }
+            }
         }
     }
 }

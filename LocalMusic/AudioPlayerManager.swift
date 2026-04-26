@@ -99,11 +99,10 @@ final class AudioPlayerManager: ObservableObject {
     /// until a new folder is opened or the manager is deallocated.
     func startAccessingFolder(_ url: URL) {
         stopAccessingCurrentFolder()
-        let result = url.startAccessingSecurityScopedResource()
-        print("[LocalMusic] startAccessingFolder: \(url.path)")
-        print("[LocalMusic] startAccessingSecurityScopedResource returned: \(result)")
-        // Store regardless of return value — `false` can mean access is
-        // already cached via a sandbox extension, so files may still be readable.
+        // Return value is intentionally ignored: `false` can mean access is
+        // already cached via a sandbox extension, so files may still be
+        // readable. We only need to call stopAccessing to balance the count.
+        _ = url.startAccessingSecurityScopedResource()
         activeSecurityScopedURL = url
     }
 
@@ -261,14 +260,6 @@ final class AudioPlayerManager: ObservableObject {
         statusObserver?.invalidate()
         statusObserver = nil
 
-        print("[LocalMusic] loadAndPlay: \(track.url.path)")
-        print("[LocalMusic] activeSecurityScopedURL: \(activeSecurityScopedURL?.path ?? "nil")")
-        print("[LocalMusic] track URL starts with folder URL: \(activeSecurityScopedURL.map { track.url.path.hasPrefix($0.path) } ?? false)")
-
-        // Test if we can read the file directly
-        let readable = FileManager.default.isReadableFile(atPath: track.url.path)
-        print("[LocalMusic] FileManager.isReadableFile: \(readable)")
-
         let item = AVPlayerItem(url: track.url)
 
         if player == nil {
@@ -281,10 +272,19 @@ final class AudioPlayerManager: ObservableObject {
         duration = track.duration
         currentTime = 0
 
-        // Wait for the item to be ready before playing
-        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
+        // Wait for the item to be ready before playing.
+        //
+        // The KVO callback is dispatched onto the main queue, but rapid track
+        // changes can leave a queued .readyToPlay block in flight after we've
+        // moved on. Comparing `observedItem` against the captured `item`
+        // (and against the player's current item) drops those stale calls.
+        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] observedItem, _ in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self,
+                      let item,
+                      observedItem === item,
+                      self.player?.currentItem === item
+                else { return }
                 switch observedItem.status {
                 case .readyToPlay:
                     self.player?.play()
@@ -349,12 +349,32 @@ final class AudioPlayerManager: ObservableObject {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime
         ]
 
-        if let artworkData = track.artworkData, let image = UIImage(data: artworkData) {
+        if let image = ArtworkCache.cachedFullImage(for: track.url)
+            ?? ArtworkCache.cachedThumbnail(for: track.url) {
             let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             info[MPMediaItemPropertyArtwork] = artwork
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+
+        if track.hasArtwork
+            && ArtworkCache.cachedFullImage(for: track.url) == nil
+            && ArtworkCache.cachedThumbnail(for: track.url) == nil {
+            let url = track.url
+            let scale = UIScreen.main.scale
+            Task { [weak self] in
+                guard let image = await ArtworkCache.thumbnail(for: url, pointSize: 256, scale: scale)
+                else { return }
+                await MainActor.run { [weak self] in
+                    guard let self,
+                          self.currentTrack?.url == url,
+                          var info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+                    else { return }
+                    info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+                }
+            }
+        }
     }
 
     private func updateNowPlayingElapsed() {

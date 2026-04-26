@@ -22,9 +22,13 @@ struct MiniPlayerView: View {
             .padding(.horizontal, 4)
 
             HStack(spacing: 12) {
-                artworkView
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                ArtworkView(
+                    trackURL: player.currentTrack?.url,
+                    hasArtwork: player.currentTrack?.hasArtwork ?? false,
+                    pointSize: 48
+                )
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(player.currentTrack?.title ?? "")
@@ -68,22 +72,6 @@ struct MiniPlayerView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             onTap()
-        }
-    }
-
-    @ViewBuilder
-    private var artworkView: some View {
-        if let data = player.currentTrack?.artworkData,
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else {
-            ZStack {
-                Color(white: 0.85).opacity(0.5)
-                Image(systemName: "music.note")
-                    .foregroundStyle(Color(white: 0.55))
-            }
         }
     }
 }

@@ -1,6 +1,12 @@
 import AVFoundation
 import UIKit
 
+/// Progress payload published while a folder scan is in flight.
+struct ScanProgress: Sendable, Equatable {
+    var completed: Int
+    var total: Int
+}
+
 struct MetadataLoader {
 
     static let supportedExtensions: Set<String> = [
@@ -11,24 +17,51 @@ struct MetadataLoader {
         "m3u", "m3u8", "pls"
     ]
 
+    /// Maximum number of concurrent metadata loads. AVFoundation hits the file
+    /// system aggressively, so we cap concurrency to avoid descriptor pressure.
+    private static let scanConcurrency = 8
+
     // MARK: - Folder Scanning
 
     /// Caller must ensure security-scoped access is already active on `url`.
-    static func scanFolder(at url: URL) async -> [Track] {
-        print("[LocalMusic] scanFolder at: \(url.path)")
+    /// Reports progress periodically via `onProgress`. Tracks are returned
+    /// sorted by title for legacy callers; `LibraryStore` re-sorts as needed.
+    static func scanFolder(at url: URL,
+                           onProgress: (@Sendable (ScanProgress) -> Void)? = nil) async -> [Track] {
         let audioURLs = collectAudioFiles(in: url)
-        print("[LocalMusic] found \(audioURLs.count) audio files")
-        if let first = audioURLs.first {
-            print("[LocalMusic] first file URL: \(first.path)")
+        let total = audioURLs.count
+        guard total > 0 else {
+            onProgress?(ScanProgress(completed: 0, total: 0))
+            return []
         }
 
         var tracks: [Track] = []
-        for fileURL in audioURLs {
-            let track = await loadTrack(from: fileURL)
-            tracks.append(track)
+        tracks.reserveCapacity(total)
+
+        // The order tracks land in is determined by the TaskGroup; LibraryStore
+        // re-sorts according to the active sort option in `ingest`, so we
+        // skip an extra `sorted` here.
+        await withTaskGroup(of: Track.self) { group in
+            var iterator = audioURLs.makeIterator()
+            let seed = min(scanConcurrency, total)
+            for _ in 0..<seed {
+                guard let next = iterator.next() else { break }
+                group.addTask { await loadTrack(from: next) }
+            }
+            var completed = 0
+            for await track in group {
+                tracks.append(track)
+                completed += 1
+                if completed % 25 == 0 || completed == total {
+                    onProgress?(ScanProgress(completed: completed, total: total))
+                }
+                if let next = iterator.next() {
+                    group.addTask { await loadTrack(from: next) }
+                }
+            }
         }
 
-        return tracks.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        return tracks
     }
 
     /// Recursively collect audio files using `contentsOfDirectory(at:)`.
@@ -71,8 +104,6 @@ struct MetadataLoader {
         var album = "Unknown Album"
         var duration: Double = 0
         var artworkData: Data?
-        var lyrics: String?
-        var syncedLyrics: [SyncedLyricLine]?
 
         do {
             let durationTime = try await asset.load(.duration)
@@ -108,20 +139,39 @@ struct MetadataLoader {
             }
         } catch { }
 
-        // Extract lyrics from format-specific metadata
-        lyrics = await extractUnsyncedLyrics(from: asset)
-        syncedLyrics = await extractSyncedLyrics(from: asset)
+        // Persist artwork to disk cache instead of the in-memory Track.
+        var hasArtwork = false
+        if let data = artworkData, !data.isEmpty {
+            ArtworkCache.storeSync(data, for: url)
+            hasArtwork = true
+        } else {
+            // Clean up stale artwork from a prior scan.
+            if ArtworkCache.hasArtwork(for: url) {
+                ArtworkCache.remove(for: url)
+            }
+        }
+
+        // Persist lyrics to disk cache; only `hasLyrics` lives on the Track.
+        let unsynced = await extractUnsyncedLyrics(from: asset)
+        let synced = await extractSyncedLyrics(from: asset)
+        let lyrics = TrackLyrics(unsynced: unsynced, synced: synced)
+        var hasLyrics = false
+        if !lyrics.isEmpty {
+            LyricsCache.storeSync(lyrics, for: url)
+            hasLyrics = true
+        } else if LyricsCache.hasLyrics(for: url) {
+            LyricsCache.remove(for: url)
+        }
 
         return Track(
-            id: UUID(),
+            id: Track.stableID(for: url),
             url: url,
             title: title,
             artist: artist,
             album: album,
             duration: duration,
-            artworkData: artworkData,
-            lyrics: lyrics,
-            syncedLyrics: syncedLyrics
+            hasArtwork: hasArtwork,
+            hasLyrics: hasLyrics
         )
     }
 
@@ -181,9 +231,6 @@ struct MetadataLoader {
         // bytes 1-3: language (skip)
         let timestampFormat = data[4]
         // byte 5: content type (skip)
-
-        let isUTF16 = encoding == 1 || encoding == 2
-        let nullTermSize = isUTF16 ? 2 : 1
 
         // Skip past content descriptor (null-terminated string after the 6-byte header)
         var offset = 6

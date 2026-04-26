@@ -1,74 +1,49 @@
 import SwiftUI
 
 struct PlaylistsView: View {
-    @EnvironmentObject private var player: AudioPlayerManager
-    @State private var playlists: [Playlist] = []
-    @State private var library: [Track] = []
-    @State private var isLoading = false
+    // Doesn't observe `AudioPlayerManager` for the same reason as `LibraryView`:
+    // playback ticks shouldn't re-render the playlist list.
+    @EnvironmentObject private var library: LibraryStore
     @State private var showNewPlaylistAlert = false
     @State private var newPlaylistName = ""
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading {
-                    ProgressView("Scanning for playlists…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if playlists.isEmpty {
-                    VStack(spacing: 16) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.accentColor.opacity(0.12))
-                                .frame(width: 100, height: 100)
-                            Image(systemName: "rectangle.stack")
-                                .font(.system(size: 40))
-                                .foregroundColor(Color.accentColor)
-                        }
-                        Text("No Playlists Found")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                        Text("Add .m3u or .pls files to your music folder, or tap + to create one.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if library.playlists.isEmpty {
+                    emptyState
                 } else {
                     List {
-                        ForEach(Array(playlists.enumerated()), id: \.element.id) { index, playlist in
+                        ForEach(library.playlists) { playlist in
                             NavigationLink {
-                                PlaylistDetailView(playlist: $playlists[index], library: library)
-                            } label: {
-                                HStack(spacing: 14) {
-                                    PlaylistMosaicView(
-                                        trackURLs: playlist.trackURLs,
-                                        library: library
+                                // Binding is keyed on `playlist.id` rather than the
+                                // ForEach index, so a delete or reorder while a
+                                // detail view is on the navigation stack can't
+                                // dereference a stale array slot.
+                                PlaylistDetailView(
+                                    playlist: Binding(
+                                        get: {
+                                            library.playlists.first(where: { $0.id == playlist.id })
+                                                ?? playlist
+                                        },
+                                        set: { library.savePlaylist($0) }
                                     )
-                                    .frame(width: 52, height: 52)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(playlist.name)
-                                            .font(.callout)
-                                            .fontWeight(.medium)
-                                        Text("\(playlist.trackURLs.count) track\(playlist.trackURLs.count == 1 ? "" : "s")")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.vertical, 4)
+                                )
+                            } label: {
+                                playlistRow(playlist)
                             }
                             .listRowSeparator(.hidden)
                         }
-                        .onDelete(perform: deletePlaylists)
+                        .onDelete { offsets in
+                            library.deletePlaylists(at: offsets)
+                        }
                     }
                     .listStyle(.plain)
                 }
             }
             .navigationTitle("Playlists")
             .refreshable {
-                await refreshPlaylists()
+                library.refreshPlaylistsFromDisk()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -84,52 +59,53 @@ struct PlaylistsView: View {
                 TextField("Playlist name", text: $newPlaylistName)
                 Button("Cancel", role: .cancel) { }
                 Button("Create") {
-                    createPlaylist()
+                    _ = library.createPlaylist(name: newPlaylistName)
                 }
             } message: {
                 Text("Enter a name for the new playlist.")
             }
         }
-        .onAppear {
-            loadPlaylists()
-        }
     }
 
-    private func loadPlaylists() {
-        library = PersistenceManager.shared.loadLibrary()
-        guard let url = PersistenceManager.shared.loadFolderBookmark() else { return }
-        isLoading = playlists.isEmpty
-        Task {
-            let found = MetadataLoader.scanPlaylists(in: url)
-            await MainActor.run {
-                playlists = found
-                isLoading = false
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "rectangle.stack")
+                    .font(.system(size: 40))
+                    .foregroundColor(Color.accentColor)
+            }
+            Text("No Playlists Found")
+                .font(.title3)
+                .fontWeight(.medium)
+            Text("Add .m3u or .pls files to your music folder, or tap + to create one.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func playlistRow(_ playlist: Playlist) -> some View {
+        HStack(spacing: 14) {
+            PlaylistMosaicView(trackURLs: playlist.trackURLs)
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(playlist.name)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                Text("\(playlist.trackURLs.count) track\(playlist.trackURLs.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func refreshPlaylists() async {
-        library = PersistenceManager.shared.loadLibrary()
-        guard let url = PersistenceManager.shared.loadFolderBookmark() else { return }
-        let found = MetadataLoader.scanPlaylists(in: url)
-        playlists = found
-    }
-
-    private func createPlaylist() {
-        let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty,
-              let folderURL = PersistenceManager.shared.loadFolderBookmark() else { return }
-        let playlist = MetadataLoader.createPlaylist(name: name, in: folderURL)
-        playlists.append(playlist)
-        playlists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private func deletePlaylists(at offsets: IndexSet) {
-        for index in offsets {
-            let playlist = playlists[index]
-            try? FileManager.default.removeItem(at: playlist.fileURL)
-        }
-        playlists.remove(atOffsets: offsets)
+        .padding(.vertical, 4)
     }
 }
 
@@ -137,66 +113,65 @@ struct PlaylistsView: View {
 
 struct PlaylistMosaicView: View {
     let trackURLs: [URL]
-    let library: [Track]
+    @EnvironmentObject private var library: LibraryStore
 
-    private var artworkImages: [Data] {
-        var images: [Data] = []
+    /// Resolves up to four URLs that have artwork, using the store's O(1)
+    /// lookup instead of a per-row linear scan over the library.
+    private var artworkURLs: [URL] {
+        var result: [URL] = []
         for url in trackURLs {
-            if images.count >= 4 { break }
-            if let track = library.first(where: { $0.url.standardized == url.standardized }),
-               let data = track.artworkData {
-                images.append(data)
+            if result.count >= 4 { break }
+            if let track = library.track(forURL: url), track.hasArtwork {
+                result.append(track.url)
             }
         }
-        return images
+        return result
     }
 
     var body: some View {
         GeometryReader { geo in
             let half = geo.size.width / 2
-            if artworkImages.isEmpty {
+            let urls = artworkURLs
+            if urls.isEmpty {
                 ZStack {
                     Color(white: 0.85).opacity(0.5)
                     Image(systemName: "music.note.list")
                         .font(.body)
                         .foregroundStyle(Color(white: 0.55))
                 }
-            } else if artworkImages.count == 1 {
-                artworkImage(artworkImages[0])
+            } else if urls.count == 1 {
+                ArtworkView(trackURL: urls[0], hasArtwork: true, pointSize: geo.size.width)
             } else {
-                let grid = padded(artworkImages, to: 4)
+                let grid = padded(urls, to: 4)
                 VStack(spacing: 0) {
                     HStack(spacing: 0) {
-                        artworkImage(grid[0]).frame(width: half, height: half)
-                        artworkImage(grid[1]).frame(width: half, height: half)
+                        cell(grid[0], side: half)
+                        cell(grid[1], side: half)
                     }
                     HStack(spacing: 0) {
-                        artworkImage(grid[2]).frame(width: half, height: half)
-                        artworkImage(grid[3]).frame(width: half, height: half)
+                        cell(grid[2], side: half)
+                        cell(grid[3], side: half)
                     }
                 }
             }
         }
     }
 
-    private func artworkImage(_ data: Data?) -> some View {
-        Group {
-            if let data, let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Color(white: 0.85).opacity(0.5)
-            }
+    @ViewBuilder
+    private func cell(_ url: URL?, side: CGFloat) -> some View {
+        if let url {
+            ArtworkView(trackURL: url, hasArtwork: true, pointSize: side)
+                .frame(width: side, height: side)
+                .clipped()
+        } else {
+            Color(white: 0.85).opacity(0.5)
+                .frame(width: side, height: side)
         }
-        .clipped()
     }
 
-    private func padded(_ images: [Data], to count: Int) -> [Data?] {
-        var result: [Data?] = images.map { $0 }
-        while result.count < count {
-            result.append(nil)
-        }
+    private func padded(_ urls: [URL], to count: Int) -> [URL?] {
+        var result: [URL?] = urls.map { $0 }
+        while result.count < count { result.append(nil) }
         return result
     }
 }

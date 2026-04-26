@@ -1,14 +1,10 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Binding var folderURL: URL?
-    let trackCount: Int
-    let playlistCount: Int
-    let onRescan: () -> Void
+    @EnvironmentObject private var library: LibraryStore
 
     @Environment(\.dismiss) private var dismiss
     @State private var showFolderPicker = false
-    @State private var lastSynced: Date? = PersistenceManager.shared.loadLastSynced()
 
     var body: some View {
         NavigationStack {
@@ -18,7 +14,7 @@ struct SettingsView: View {
                         showFolderPicker = true
                     } label: {
                         LabeledContent {
-                            Text(folderURL?.lastPathComponent ?? "Not selected")
+                            Text(library.folderURL?.lastPathComponent ?? "Not selected")
                                 .foregroundStyle(.secondary)
                         } label: {
                             Label("Folder", systemImage: "folder")
@@ -27,18 +23,38 @@ struct SettingsView: View {
                     .tint(.primary)
 
                     Button("Reload Music") {
-                        onRescan()
-                        lastSynced = PersistenceManager.shared.loadLastSynced()
+                        Task { await library.rescan() }
+                    }
+                    .disabled(library.folderURL == nil || library.isScanning)
+
+                    if let lastSynced = library.lastSynced {
+                        LabeledContent("Last Synced", value: lastSynced, format: .dateTime)
                     }
 
-                    if let lastSynced {
-                        LabeledContent("Last Synced", value: lastSynced, format: .dateTime)
+                    if library.isScanning {
+                        if let progress = library.scanProgress, progress.total > 0 {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ProgressView(value: Double(progress.completed),
+                                             total: Double(max(progress.total, 1)))
+                                Text("Scanning \(progress.completed) of \(progress.total)…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        } else {
+                            HStack {
+                                ProgressView()
+                                Text("Scanning folder…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
 
                 Section("Info") {
-                    LabeledContent("Total Songs", value: "\(trackCount)")
-                    LabeledContent("Total Playlists", value: "\(playlistCount)")
+                    LabeledContent("Total Songs", value: "\(library.tracks.count)")
+                    LabeledContent("Total Playlists", value: "\(library.playlists.count)")
                 }
             }
             .navigationTitle("Settings")
@@ -50,14 +66,14 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showFolderPicker) {
                 DocumentPicker { pickerURL in
+                    // The picker's URL carries a transient security scope that
+                    // must be claimed and turned into a bookmark synchronously
+                    // here; the rescan can then run as a Task.
                     _ = pickerURL.startAccessingSecurityScopedResource()
                     PersistenceManager.shared.saveFolderBookmark(pickerURL)
                     pickerURL.stopAccessingSecurityScopedResource()
-
-                    if let resolvedURL = PersistenceManager.shared.loadFolderBookmark() {
-                        folderURL = resolvedURL
-                        onRescan()
-                        lastSynced = PersistenceManager.shared.loadLastSynced()
+                    Task {
+                        await library.adoptSavedFolder()
                     }
                 }
             }
