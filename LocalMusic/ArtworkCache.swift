@@ -83,39 +83,31 @@ enum ArtworkCache {
     static func thumbnail(for trackURL: URL,
                           pointSize: CGFloat,
                           scale: CGFloat) async -> UIImage? {
-        let cacheKey = key(for: trackURL) as NSString
-        if let cached = thumbnailMemoryCache.object(forKey: cacheKey) {
-            return cached
-        }
-        let path = fileURL(for: trackURL)
-        let maxPixel = max(pointSize * scale, 1)
-        let image: UIImage? = await withCheckedContinuation { cont in
-            ioQueue.async {
-                guard let source = CGImageSourceCreateWithURL(path as CFURL, nil) else {
-                    cont.resume(returning: nil); return
-                }
-                let opts: [CFString: Any] = [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceShouldCacheImmediately: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: maxPixel
-                ]
-                guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, opts as CFDictionary) else {
-                    cont.resume(returning: nil); return
-                }
-                cont.resume(returning: UIImage(cgImage: cg))
-            }
-        }
-        if let image {
-            thumbnailMemoryCache.setObject(image, forKey: cacheKey)
-        }
-        return image
+        await loadDownsampled(trackURL: trackURL,
+                              pointSize: pointSize,
+                              scale: scale,
+                              cache: thumbnailMemoryCache)
     }
 
     /// Loads (and caches) a near-full-size image suitable for Now Playing.
-    static func fullImage(for trackURL: URL, pointSize: CGFloat, scale: CGFloat) async -> UIImage? {
-        let cacheKey = key(for: trackURL) as NSString
-        if let cached = fullImageMemoryCache.object(forKey: cacheKey) {
+    static func fullImage(for trackURL: URL,
+                          pointSize: CGFloat,
+                          scale: CGFloat) async -> UIImage? {
+        await loadDownsampled(trackURL: trackURL,
+                              pointSize: pointSize,
+                              scale: scale,
+                              cache: fullImageMemoryCache)
+    }
+
+    /// Shared decode pipeline for thumbnail / full-image variants: hits the
+    /// supplied memory cache first, falls back to ImageIO downsampling on
+    /// the I/O queue, and writes successful results back into the cache.
+    private static func loadDownsampled(trackURL: URL,
+                                        pointSize: CGFloat,
+                                        scale: CGFloat,
+                                        cache: NSCache<NSString, UIImage>) async -> UIImage? {
+        let keyString = key(for: trackURL)
+        if let cached = cache.object(forKey: keyString as NSString) {
             return cached
         }
         let path = fileURL(for: trackURL)
@@ -138,7 +130,7 @@ enum ArtworkCache {
             }
         }
         if let image {
-            fullImageMemoryCache.setObject(image, forKey: cacheKey)
+            cache.setObject(image, forKey: keyString as NSString)
         }
         return image
     }

@@ -286,17 +286,10 @@ struct AddTracksSheet: View {
 
     private var filteredLibrary: [Track] {
         // Ceiling on rendered rows so the sheet stays responsive even for
-        // 10k-track libraries when the user hasn't typed anything yet.
-        let source = library.tracks
-        let q = debouncedQuery.lowercased()
-        if q.isEmpty {
-            return Array(source.prefix(500))
-        }
-        return source.filter {
-            $0.title.lowercased().contains(q) ||
-            $0.artist.lowercased().contains(q) ||
-            $0.album.lowercased().contains(q)
-        }
+        // 10k-track libraries when the user hasn't typed anything yet. The
+        // store's pre-lowercased index does the actual matching.
+        library.searchTracks(query: debouncedQuery,
+                             limit: debouncedQuery.isEmpty ? 500 : nil)
     }
 
     private func toggle(_ track: Track) {

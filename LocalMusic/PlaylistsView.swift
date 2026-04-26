@@ -14,11 +14,18 @@ struct PlaylistsView: View {
                     emptyState
                 } else {
                     List {
-                        ForEach(Array(library.playlists.enumerated()), id: \.element.id) { index, playlist in
+                        ForEach(library.playlists) { playlist in
                             NavigationLink {
+                                // Binding is keyed on `playlist.id` rather than the
+                                // ForEach index, so a delete or reorder while a
+                                // detail view is on the navigation stack can't
+                                // dereference a stale array slot.
                                 PlaylistDetailView(
                                     playlist: Binding(
-                                        get: { library.playlists[index] },
+                                        get: {
+                                            library.playlists.first(where: { $0.id == playlist.id })
+                                                ?? playlist
+                                        },
                                         set: { library.savePlaylist($0) }
                                     )
                                 )

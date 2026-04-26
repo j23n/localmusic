@@ -44,7 +44,10 @@ struct NowPlayingView: View {
     private func nowPlayingContent(track: Track) -> some View {
         let artworkSize = UIScreen.main.bounds.width - 48
         let color = Color(artworkColor)
-        let hasLyrics = track.hasLyrics && (lyrics?.isEmpty == false || lyrics == nil)
+        // Only show the flip affordance once the lyrics payload is loaded
+        // and confirmed non-empty, so we don't promise content the disk
+        // load might fail to deliver.
+        let hasLoadedLyrics = lyrics?.isEmpty == false
 
         return ZStack {
             // Ambient background
@@ -87,14 +90,14 @@ struct NowPlayingView: View {
                 .shadow(color: color.opacity(0.45), radius: 28, x: 0, y: 12)
                 .animation(.spring(response: 0.5), value: track.id)
                 .onTapGesture {
-                    if hasLyrics {
+                    if hasLoadedLyrics {
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                             showLyrics.toggle()
                         }
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if hasLyrics && !showLyrics {
+                    if hasLoadedLyrics && !showLyrics {
                         Image(systemName: "quote.opening")
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -332,7 +335,7 @@ struct SyncedLyricsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 8) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
                         Text(line.text)
                             .font(.body)

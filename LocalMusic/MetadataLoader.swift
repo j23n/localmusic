@@ -28,13 +28,8 @@ struct MetadataLoader {
     /// sorted by title for legacy callers; `LibraryStore` re-sorts as needed.
     static func scanFolder(at url: URL,
                            onProgress: (@Sendable (ScanProgress) -> Void)? = nil) async -> [Track] {
-        print("[LocalMusic] scanFolder at: \(url.path)")
         let audioURLs = collectAudioFiles(in: url)
         let total = audioURLs.count
-        print("[LocalMusic] found \(total) audio files")
-        if let first = audioURLs.first {
-            print("[LocalMusic] first file URL: \(first.path)")
-        }
         guard total > 0 else {
             onProgress?(ScanProgress(completed: 0, total: 0))
             return []
@@ -43,6 +38,9 @@ struct MetadataLoader {
         var tracks: [Track] = []
         tracks.reserveCapacity(total)
 
+        // The order tracks land in is determined by the TaskGroup; LibraryStore
+        // re-sorts according to the active sort option in `ingest`, so we
+        // skip an extra `sorted` here.
         await withTaskGroup(of: Track.self) { group in
             var iterator = audioURLs.makeIterator()
             let seed = min(scanConcurrency, total)
@@ -63,7 +61,7 @@ struct MetadataLoader {
             }
         }
 
-        return tracks.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        return tracks
     }
 
     /// Recursively collect audio files using `contentsOfDirectory(at:)`.

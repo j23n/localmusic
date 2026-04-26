@@ -84,6 +84,28 @@ final class LibraryStore: ObservableObject {
         urls.compactMap { tracksByURL[$0.standardized] }
     }
 
+    /// Synchronous filter that reuses the pre-lowercased search index built
+    /// during ingest. Avoids the per-track `.lowercased()` allocations the
+    /// naive `tracks.filter { ... }` would incur — useful for sheets that
+    /// need their own filtered view without going through the debounced
+    /// `displayTracks` pipeline.
+    func searchTracks(query: String, limit: Int? = nil) -> [Track] {
+        let q = query.lowercased()
+        if q.isEmpty {
+            if let limit { return Array(tracks.prefix(limit)) }
+            return tracks
+        }
+        var result: [Track] = []
+        result.reserveCapacity(min(tracks.count, limit ?? .max))
+        for i in 0..<tracks.count {
+            if i < searchKeys.count, searchKeys[i].contains(q) {
+                result.append(tracks[i])
+                if let limit, result.count >= limit { break }
+            }
+        }
+        return result
+    }
+
     // MARK: - Bootstrap & Rescan
 
     /// Loads cached tracks (if any) and the playlist list, then triggers an
@@ -142,9 +164,9 @@ final class LibraryStore: ObservableObject {
             let now = Date()
             PersistenceManager.shared.saveLastSynced(now)
             lastSynced = now
-        } else {
-            print("[LocalMusic] Rescan returned 0 tracks, keeping cached data")
         }
+        // If `scanned` is empty (likely a transient access failure) we
+        // intentionally keep the cached library rather than blowing it away.
 
         playlists = MetadataLoader.scanPlaylists(in: folderURL)
         isScanning = false
@@ -236,17 +258,16 @@ final class LibraryStore: ObservableObject {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
             }
-            let (result, sections) = await Self.filterSortSection(
+            guard let output = await Self.filterSortSection(
                 tracks: tracks,
                 keys: keys,
                 query: captureSearch,
                 sort: captureSort
-            )
-            if Task.isCancelled { return }
-            await MainActor.run {
+            ), !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.displayTracks = result
-                self.sections = sections
+                self.displayTracks = output.0
+                self.sections = output.1
                 self.isFiltering = false
             }
         }
@@ -254,11 +275,17 @@ final class LibraryStore: ObservableObject {
 
     /// Filters, sorts, and pre-computes sections in a single detached task so
     /// large libraries don't block the main thread.
+    ///
+    /// `Task.checkCancellation` is consulted between each phase, and the
+    /// outer `withTaskCancellationHandler` forwards the parent task's
+    /// cancellation into the detached worker — without it, cancelling
+    /// `applyTask` would only abandon the await and leave the worker
+    /// running to completion.
     private static func filterSortSection(tracks: [Track],
                                           keys: [String],
                                           query: String,
-                                          sort: SortOption) async -> ([Track], [LibrarySection]) {
-        await Task.detached(priority: .userInitiated) {
+                                          sort: SortOption) async -> ([Track], [LibrarySection])? {
+        let task = Task.detached(priority: .userInitiated) { () throws -> ([Track], [LibrarySection]) in
             var indices: [Int]
             let q = query.lowercased()
             if q.isEmpty {
@@ -267,9 +294,11 @@ final class LibraryStore: ObservableObject {
                 indices = []
                 indices.reserveCapacity(tracks.count)
                 for i in 0..<tracks.count {
+                    if i % 1024 == 0 { try Task.checkCancellation() }
                     if i < keys.count, keys[i].contains(q) { indices.append(i) }
                 }
             }
+            try Task.checkCancellation()
             indices.sort { l, r in
                 let a = tracks[l]
                 let b = tracks[r]
@@ -288,10 +317,16 @@ final class LibraryStore: ObservableObject {
                     return a.duration < b.duration
                 }
             }
+            try Task.checkCancellation()
             let result = indices.map { tracks[$0] }
             let sections = makeSections(result, sort: sort)
             return (result, sections)
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            try? await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 }
 
