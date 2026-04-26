@@ -4,6 +4,10 @@ import UIKit
 struct NowPlayingView: View {
     @EnvironmentObject private var player: AudioPlayerManager
     @State private var showLyrics = false
+    @State private var lyrics: TrackLyrics?
+    @State private var lyricsTrackID: UUID?
+    @State private var artworkColor: UIColor = .systemGray
+    @State private var artworkColorTrackID: UUID?
 
     var body: some View {
         NavigationStack {
@@ -11,6 +15,9 @@ struct NowPlayingView: View {
                 nowPlayingContent(track: track)
                     .navigationTitle("Now Playing")
                     .navigationBarTitleDisplayMode(.inline)
+                    .task(id: track.id) {
+                        await loadAuxiliary(for: track)
+                    }
             } else {
                 VStack(spacing: 16) {
                     ZStack {
@@ -35,11 +42,9 @@ struct NowPlayingView: View {
     }
 
     private func nowPlayingContent(track: Track) -> some View {
-        let artworkColor = track.artworkData
-            .flatMap { UIImage(data: $0) }
-            .flatMap { $0.dominantColor } ?? UIColor.systemGray
-
         let artworkSize = UIScreen.main.bounds.width - 48
+        let color = Color(artworkColor)
+        let hasLyrics = track.hasLyrics && (lyrics?.isEmpty == false || lyrics == nil)
 
         return ZStack {
             // Ambient background
@@ -47,8 +52,8 @@ struct NowPlayingView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(artworkColor).opacity(0.5),
-                            Color(artworkColor).opacity(0.12),
+                            color.opacity(0.5),
+                            color.opacity(0.12),
                             .clear
                         ],
                         startPoint: .top,
@@ -63,7 +68,6 @@ struct NowPlayingView: View {
 
                 // Artwork / Lyrics flip
                 ZStack {
-                    // Front: artwork
                     artworkView(track: track)
                         .frame(width: artworkSize, height: artworkSize)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -74,24 +78,23 @@ struct NowPlayingView: View {
                         .opacity(showLyrics ? 0 : 1)
                         .rotation3DEffect(.degrees(showLyrics ? 180 : 0), axis: (x: 0, y: 1, z: 0))
 
-                    // Back: lyrics
                     lyricsView(track: track, size: artworkSize)
                         .frame(width: artworkSize, height: artworkSize)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .opacity(showLyrics ? 1 : 0)
                         .rotation3DEffect(.degrees(showLyrics ? 0 : -180), axis: (x: 0, y: 1, z: 0))
                 }
-                .shadow(color: Color(artworkColor).opacity(0.45), radius: 28, x: 0, y: 12)
+                .shadow(color: color.opacity(0.45), radius: 28, x: 0, y: 12)
                 .animation(.spring(response: 0.5), value: track.id)
                 .onTapGesture {
-                    if track.hasLyrics {
+                    if hasLyrics {
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                             showLyrics.toggle()
                         }
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if track.hasLyrics && !showLyrics {
+                    if hasLyrics && !showLyrics {
                         Image(systemName: "quote.opening")
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -211,19 +214,13 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private func artworkView(track: Track) -> some View {
-        if let data = track.artworkData,
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else {
-            ZStack {
-                Color(white: 0.85).opacity(0.3)
-                Image(systemName: "music.note")
-                    .font(.system(size: 64))
-                    .foregroundStyle(Color(white: 0.55))
-            }
-        }
+        ArtworkView(
+            trackURL: track.url,
+            hasArtwork: track.hasArtwork,
+            pointSize: UIScreen.main.bounds.width - 48,
+            fullResolution: true,
+            placeholderIcon: "music.note"
+        )
     }
 
     // MARK: - Lyrics
@@ -234,17 +231,19 @@ struct NowPlayingView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
 
-            if let syncedLines = track.syncedLyrics {
-                SyncedLyricsView(lines: syncedLines, currentTime: player.currentTime)
+            if let synced = lyrics?.synced, !synced.isEmpty {
+                SyncedLyricsView(lines: synced, currentTime: player.currentTime)
                     .padding(20)
-            } else if let lyrics = track.lyrics {
+            } else if let unsynced = lyrics?.unsynced, !unsynced.isEmpty {
                 ScrollView {
-                    Text(lyrics)
+                    Text(unsynced)
                         .font(.body)
                         .lineSpacing(6)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(20)
                 }
+            } else if track.hasLyrics {
+                ProgressView()
             }
         }
     }
@@ -263,6 +262,46 @@ struct NowPlayingView: View {
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
     }
+
+    // MARK: - Auxiliary loads (lyrics + dominant color)
+
+    private func loadAuxiliary(for track: Track) async {
+        // Lyrics
+        if lyricsTrackID != track.id {
+            lyrics = nil
+            lyricsTrackID = track.id
+            if track.hasLyrics {
+                let loaded = await LyricsCache.load(for: track.url)
+                if lyricsTrackID == track.id {
+                    lyrics = loaded
+                }
+            }
+        }
+
+        // Dominant color — compute once per track and cache.
+        if artworkColorTrackID != track.id {
+            artworkColorTrackID = track.id
+            if track.hasArtwork,
+               let cached = ArtworkColorCache.color(for: track.url) {
+                artworkColor = cached
+            } else if track.hasArtwork {
+                let scale = UIScreen.main.scale
+                let image = await ArtworkCache.thumbnail(for: track.url,
+                                                          pointSize: 80,
+                                                          scale: scale)
+                if let image, let color = image.dominantColor {
+                    ArtworkColorCache.set(color, for: track.url)
+                    if artworkColorTrackID == track.id {
+                        artworkColor = color
+                    }
+                } else if artworkColorTrackID == track.id {
+                    artworkColor = .systemGray
+                }
+            } else {
+                artworkColor = .systemGray
+            }
+        }
+    }
 }
 
 // MARK: - Synced Lyrics View
@@ -271,13 +310,20 @@ struct SyncedLyricsView: View {
     let lines: [SyncedLyricLine]
     let currentTime: Double
 
+    /// Binary-searches for the largest index whose timestamp is `<= currentTime`.
+    /// Replaces a per-tick linear scan over potentially hundreds of lines.
     private var activeIndex: Int {
+        guard !lines.isEmpty else { return 0 }
+        var lo = 0
+        var hi = lines.count - 1
         var best = 0
-        for (i, line) in lines.enumerated() {
-            if currentTime >= line.timestamp {
-                best = i
+        while lo <= hi {
+            let mid = (lo + hi) / 2
+            if lines[mid].timestamp <= currentTime {
+                best = mid
+                lo = mid + 1
             } else {
-                break
+                hi = mid - 1
             }
         }
         return best
@@ -304,6 +350,26 @@ struct SyncedLyricsView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Dominant Color Cache
+
+/// Caches the result of `UIImage.dominantColor` per track URL so we don't
+/// re-run the (50–150 ms) CIAreaAverage filter on every Now Playing render.
+enum ArtworkColorCache {
+    private static let storage: NSCache<NSString, UIColor> = {
+        let cache = NSCache<NSString, UIColor>()
+        cache.countLimit = 64
+        return cache
+    }()
+
+    static func color(for trackURL: URL) -> UIColor? {
+        storage.object(forKey: ArtworkCache.key(for: trackURL) as NSString)
+    }
+
+    static func set(_ color: UIColor, for trackURL: URL) {
+        storage.setObject(color, forKey: ArtworkCache.key(for: trackURL) as NSString)
     }
 }
 

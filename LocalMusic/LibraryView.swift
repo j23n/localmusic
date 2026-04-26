@@ -1,34 +1,21 @@
 import SwiftUI
 
 struct LibraryView: View {
-    @EnvironmentObject private var player: AudioPlayerManager
-    @State private var tracks: [Track] = []
-    @State private var isLoading = false
+    // Intentionally does NOT observe `AudioPlayerManager`: that would force
+    // a body re-render on every 0.5 s playback tick. Per-row playback state
+    // is read inside `TrackRowButton`, where the cost is bounded.
+    @EnvironmentObject private var library: LibraryStore
     @State private var showSettings = false
-    @State private var folderURL: URL?
-    @State private var searchText = ""
-    @State private var didLoadInitialData = false
-    @State private var playlists: [Playlist] = []
-
-    private var filteredTracks: [Track] {
-        if searchText.isEmpty { return tracks }
-        let query = searchText.lowercased()
-        return tracks.filter {
-            $0.title.lowercased().contains(query) ||
-            $0.artist.lowercased().contains(query) ||
-            $0.album.lowercased().contains(query)
-        }
-    }
+    @State private var searchDraft = ""
 
     var body: some View {
         NavigationStack {
             Group {
-                if folderURL == nil && tracks.isEmpty {
+                if library.folderURL == nil && library.tracks.isEmpty {
                     onboardingView
-                } else if isLoading {
-                    ProgressView("Scanning folder…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if tracks.isEmpty {
+                } else if library.isScanning && library.tracks.isEmpty {
+                    scanningView
+                } else if library.tracks.isEmpty {
                     emptyStateView
                 } else {
                     trackListView
@@ -36,6 +23,9 @@ struct LibraryView: View {
             }
             .navigationTitle("Library")
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    sortMenu
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings = true
@@ -45,32 +35,34 @@ struct LibraryView: View {
                 }
             }
             .sheet(isPresented: $showSettings) {
-                SettingsView(
-                    folderURL: $folderURL,
-                    trackCount: tracks.count,
-                    playlistCount: playlists.count,
-                    onRescan: {
-                        if let url = folderURL {
-                            scanFolder(url)
-                        }
-                    }
-                )
+                SettingsView()
             }
-            .searchable(text: $searchText, prompt: "Search by title, artist, or album")
+            .searchable(text: $searchDraft, prompt: "Search by title, artist, or album")
+            .onChange(of: searchDraft) { _, newValue in
+                library.searchText = newValue
+            }
             .refreshable {
-                if let url = folderURL {
-                    await rescan(url)
-                }
+                await library.rescan()
             }
-        }
-        .onAppear {
-            guard !didLoadInitialData else { return }
-            didLoadInitialData = true
-            loadCachedData()
         }
     }
 
     // MARK: - Subviews
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort By", selection: Binding(
+                get: { library.sortOption },
+                set: { library.sortOption = $0 }
+            )) {
+                ForEach(LibraryStore.SortOption.allCases) { option in
+                    Label(option.label, systemImage: option.icon).tag(option)
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+    }
 
     private var onboardingView: some View {
         VStack(spacing: 20) {
@@ -123,95 +115,126 @@ struct LibraryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var scanningView: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            if let progress = library.scanProgress, progress.total > 0 {
+                Text("Scanning \(progress.completed) of \(progress.total)…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            } else {
+                Text("Scanning folder…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
     private var trackListView: some View {
+        let sections = library.sections
+        let total = library.displayTracks.count
         List {
-            Section {
-                ForEach(filteredTracks) { track in
-                    Button {
-                        let list = filteredTracks
-                        if let idx = list.firstIndex(where: { $0.id == track.id }) {
-                            player.play(track: track, queue: list, startIndex: idx)
-                        }
-                    } label: {
-                        TrackRow(track: track,
-                                 isPlaying: player.currentTrack?.url == track.url)
+            if let progress = library.scanProgress, library.isScanning, progress.total > 0 {
+                Section {
+                    HStack {
+                        ProgressView(value: Double(progress.completed),
+                                     total: Double(max(progress.total, 1)))
+                        Text("\(progress.completed)/\(progress.total)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
-                    .contextMenu {
-                        if !playlists.isEmpty {
-                            Menu("Add to Playlist") {
-                                ForEach(playlists) { playlist in
-                                    Button(playlist.name) {
-                                        addTrack(track, to: playlist)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .listRowSeparator(.hidden)
                 }
-            } header: {
-                if !filteredTracks.isEmpty {
-                    Text("\(filteredTracks.count) track\(filteredTracks.count == 1 ? "" : "s")")
+                .listRowSeparator(.hidden)
+            }
+
+            if total == 0 {
+                Section {
+                    Text(library.searchText.isEmpty
+                         ? "No tracks."
+                         : "No matches for “\(library.searchText)”")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 30)
+                }
+                .listRowSeparator(.hidden)
+            } else {
+                Section {
+                    Text("\(total) track\(total == 1 ? "" : "s")")
                         .font(.caption)
                         .fontWeight(.medium)
                         .textCase(.uppercase)
                         .tracking(0.5)
-                        .foregroundStyle(.primary)
-                        .padding(.top, 8)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
+                .listRowSeparator(.hidden)
+
+                ForEach(sections, id: \.title) { section in
+                    Section {
+                        ForEach(section.tracks) { track in
+                            TrackRowButton(track: track)
+                                .listRowSeparator(.hidden)
+                        }
+                    } header: {
+                        Text(section.title)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                    }
                 }
             }
         }
         .listStyle(.plain)
         .contentMargins(.bottom, 80, for: .scrollContent)
     }
+}
+
+// MARK: - Row helpers
+
+/// Wraps a `TrackRow` with the play action and Add-to-Playlist context menu.
+/// Pulled out so SwiftUI doesn't re-evaluate the entire `LibraryView` body
+/// each time `player.currentTrack` ticks.
+private struct TrackRowButton: View {
+    let track: Track
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: AudioPlayerManager
+
+    var body: some View {
+        Button {
+            let queue = library.displayTracks
+            if let idx = queue.firstIndex(where: { $0.id == track.id }) {
+                player.play(track: track, queue: queue, startIndex: idx)
+            }
+        } label: {
+            TrackRow(track: track,
+                     isPlaying: player.currentTrack?.id == track.id)
+        }
+        .contextMenu {
+            if !library.playlists.isEmpty {
+                Menu("Add to Playlist") {
+                    ForEach(library.playlists) { playlist in
+                        Button(playlist.name) {
+                            addTrack(track, to: playlist)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private func addTrack(_ track: Track, to playlist: Playlist) {
-        guard let idx = playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
-        playlists[idx].trackURLs.append(track.url)
-        let baseDir = playlists[idx].fileURL.deletingLastPathComponent()
-        playlists[idx].rawPaths.append(
-            MetadataLoader.relativePath(for: track.url, relativeTo: baseDir)
-        )
-        MetadataLoader.writePlaylist(playlists[idx])
+        guard let idx = library.playlists.firstIndex(where: { $0.id == playlist.id }) else { return }
+        var updated = library.playlists[idx]
+        updated.trackURLs.append(track.url)
+        let baseDir = updated.fileURL.deletingLastPathComponent()
+        updated.rawPaths.append(MetadataLoader.relativePath(for: track.url, relativeTo: baseDir))
+        library.savePlaylist(updated)
     }
-
-    // MARK: - Actions
-
-    private func loadCachedData() {
-        let cached = PersistenceManager.shared.loadLibrary()
-        if !cached.isEmpty {
-            tracks = cached
-        }
-        if let url = PersistenceManager.shared.loadFolderBookmark() {
-            folderURL = url
-            playlists = MetadataLoader.scanPlaylists(in: url)
-            scanFolder(url)
-        }
-    }
-
-    private func scanFolder(_ url: URL) {
-        isLoading = tracks.isEmpty
-        Task {
-            await rescan(url)
-        }
-    }
-
-    private func rescan(_ url: URL) async {
-        player.startAccessingFolder(url)
-        let scanned = await MetadataLoader.scanFolder(at: url)
-        await MainActor.run {
-            if !scanned.isEmpty {
-                tracks = scanned
-                PersistenceManager.shared.saveLibrary(scanned)
-                PersistenceManager.shared.saveLastSynced(Date())
-            } else {
-                print("[LocalMusic] Rescan returned 0 tracks, keeping cached data")
-            }
-            playlists = MetadataLoader.scanPlaylists(in: url)
-            isLoading = false
-        }
-    }
-
 }
 
 // MARK: - Track Row
@@ -223,7 +246,9 @@ struct TrackRow: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                artworkView
+                ArtworkView(trackURL: track.url,
+                            hasArtwork: track.hasArtwork,
+                            pointSize: 52)
                     .frame(width: 52, height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
@@ -256,23 +281,6 @@ struct TrackRow: View {
                 .monospacedDigit()
         }
         .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private var artworkView: some View {
-        if let data = track.artworkData,
-           let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else {
-            ZStack {
-                Color(white: 0.85).opacity(0.5)
-                Image(systemName: "music.note")
-                    .font(.body)
-                    .foregroundStyle(Color(white: 0.55))
-            }
-        }
     }
 
     private func formatDuration(_ seconds: Double) -> String {
