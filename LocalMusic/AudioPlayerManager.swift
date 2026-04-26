@@ -363,15 +363,15 @@ final class AudioPlayerManager: ObservableObject {
             let url = track.url
             let scale = UIScreen.main.scale
             Task { [weak self] in
-                if let image = await ArtworkCache.thumbnail(for: url, pointSize: 256, scale: scale) {
-                    await MainActor.run {
-                        guard let self,
-                              self.currentTrack?.url == url,
-                              var info = MPNowPlayingInfoCenter.default().nowPlayingInfo
-                        else { return }
-                        info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-                    }
+                guard let image = await ArtworkCache.thumbnail(for: url, pointSize: 256, scale: scale)
+                else { return }
+                await MainActor.run { [weak self] in
+                    guard let self,
+                          self.currentTrack?.url == url,
+                          var info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+                    else { return }
+                    info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
             }
         }

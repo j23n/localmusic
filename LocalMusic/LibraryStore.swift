@@ -304,8 +304,8 @@ struct LibrarySection: Identifiable, Equatable {
 }
 
 extension LibraryStore {
-    fileprivate static func makeSections(_ tracks: [Track],
-                                         sort: SortOption) -> [LibrarySection] {
+    fileprivate nonisolated static func makeSections(_ tracks: [Track],
+                                                     sort: SortOption) -> [LibrarySection] {
         guard !tracks.isEmpty else { return [] }
         switch sort {
         case .title:    return bucketByFirstLetter(tracks, key: \.title)
@@ -315,8 +315,8 @@ extension LibraryStore {
         }
     }
 
-    private static func bucketByFirstLetter(_ tracks: [Track],
-                                            key: KeyPath<Track, String>) -> [LibrarySection] {
+    nonisolated private static func bucketByFirstLetter(_ tracks: [Track],
+                                                       key: KeyPath<Track, String>) -> [LibrarySection] {
         var sections: [LibrarySection] = []
         var currentTitle: String?
         var currentTracks: [Track] = []
@@ -337,7 +337,7 @@ extension LibraryStore {
         return sections
     }
 
-    private static func sectionLetter(for value: String) -> String {
+    nonisolated private static func sectionLetter(for value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return "#" }
         if first.isLetter {
@@ -346,7 +346,7 @@ extension LibraryStore {
         return "#"
     }
 
-    private static func bucketByDuration(_ tracks: [Track]) -> [LibrarySection] {
+    nonisolated private static func bucketByDuration(_ tracks: [Track]) -> [LibrarySection] {
         let buckets: [(String, ClosedRange<Double>)] = [
             ("Under 1 min", 0...59.999),
             ("1–3 min",     60...179.999),

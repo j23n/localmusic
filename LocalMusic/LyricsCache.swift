@@ -65,21 +65,20 @@ enum LyricsCache {
 
     /// Loads lyrics off the main actor. Returns `nil` if no cache entry.
     static func load(for trackURL: URL) async -> TrackLyrics? {
-        let cacheKey = key(for: trackURL) as NSString
-        if let cached = memoryCache.object(forKey: cacheKey) as Data?,
+        let keyString = key(for: trackURL)
+        if let cached = memoryCache.object(forKey: keyString as NSString) as Data?,
            let lyrics = try? JSONDecoder().decode(TrackLyrics.self, from: cached) {
             return lyrics
         }
         let path = fileURL(for: trackURL)
-        return await withCheckedContinuation { cont in
+        let data: Data? = await withCheckedContinuation { cont in
             ioQueue.async {
-                guard let data = try? Data(contentsOf: path) else {
-                    cont.resume(returning: nil); return
-                }
-                memoryCache.setObject(data as NSData, forKey: cacheKey)
-                cont.resume(returning: try? JSONDecoder().decode(TrackLyrics.self, from: data))
+                cont.resume(returning: try? Data(contentsOf: path))
             }
         }
+        guard let data else { return nil }
+        memoryCache.setObject(data as NSData, forKey: keyString as NSString)
+        return try? JSONDecoder().decode(TrackLyrics.self, from: data)
     }
 
     static func purgeMemoryCache() {
