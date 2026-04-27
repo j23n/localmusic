@@ -12,31 +12,46 @@ final class AudioPlayerManager: ObservableObject {
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var shuffleEnabled: Bool = false {
-        didSet { UserDefaults.standard.set(shuffleEnabled, forKey: "shuffleEnabled") }
+        didSet {
+            UserDefaults.standard.set(shuffleEnabled, forKey: "shuffleEnabled")
+            queue.shuffleEnabled = shuffleEnabled
+        }
     }
     @Published var repeatMode: RepeatMode = .off {
-        didSet { UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode") }
+        didSet {
+            UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode")
+            queue.repeatMode = repeatMode
+        }
     }
     @Published var currentQueue: [Track] = []
     @Published var currentIndex: Int = 0
 
     // MARK: - Private
 
+    /// Pure state machine for queue/shuffle/repeat. We mirror the relevant
+    /// fields onto the `@Published` properties above after each mutation so
+    /// the existing view code keeps observing the same surface.
+    private var queue = PlaybackQueue()
+
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObserver: NSKeyValueObservation?
-    private var unshuffledQueue: [Track] = []
     private var activeSecurityScopedURL: URL?
 
     // MARK: - Init
 
     init() {
-        shuffleEnabled = UserDefaults.standard.bool(forKey: "shuffleEnabled")
-        if let raw = UserDefaults.standard.string(forKey: "repeatMode"),
-           let mode = RepeatMode(rawValue: raw) {
-            repeatMode = mode
-        }
+        let storedShuffle = UserDefaults.standard.bool(forKey: "shuffleEnabled")
+        let storedMode: RepeatMode = {
+            guard let raw = UserDefaults.standard.string(forKey: "repeatMode"),
+                  let mode = RepeatMode(rawValue: raw) else { return .off }
+            return mode
+        }()
+        shuffleEnabled = storedShuffle
+        repeatMode = storedMode
+        queue.shuffleEnabled = storedShuffle
+        queue.repeatMode = storedMode
         configureAudioSession()
         configureRemoteCommands()
     }
@@ -113,41 +128,16 @@ final class AudioPlayerManager: ObservableObject {
 
     // MARK: - Playback Control
 
-    func play(track: Track, queue: [Track], startIndex: Int) {
-        unshuffledQueue = queue
-        if shuffleEnabled {
-            var shuffled = queue
-            if startIndex < shuffled.count {
-                shuffled.remove(at: startIndex)
-                shuffled.shuffle()
-                shuffled.insert(track, at: 0)
-            }
-            currentQueue = shuffled
-            currentIndex = 0
-        } else {
-            currentQueue = queue
-            currentIndex = startIndex
-        }
-        loadAndPlay(track)
+    func play(track: Track, queue tracks: [Track], startIndex: Int) {
+        let action = queue.play(track: track, queue: tracks, startIndex: startIndex)
+        syncPublishedFromQueue()
+        apply(action)
     }
 
     func setQueue(_ tracks: [Track], startIndex: Int) {
-        unshuffledQueue = tracks
-        if shuffleEnabled {
-            let track = tracks[startIndex]
-            var shuffled = tracks
-            shuffled.remove(at: startIndex)
-            shuffled.shuffle()
-            shuffled.insert(track, at: 0)
-            currentQueue = shuffled
-            currentIndex = 0
-        } else {
-            currentQueue = tracks
-            currentIndex = startIndex
-        }
-        if let track = currentQueue[safe: currentIndex] {
-            loadAndPlay(track)
-        }
+        let action = queue.setQueue(tracks, startIndex: startIndex)
+        syncPublishedFromQueue()
+        apply(action)
     }
 
     func togglePlayPause() {
@@ -163,54 +153,15 @@ final class AudioPlayerManager: ObservableObject {
     }
 
     func next() {
-        guard !currentQueue.isEmpty else { return }
-
-        if repeatMode == .one {
-            seek(to: 0)
-            player?.play()
-            isPlaying = true
-            return
-        }
-
-        let nextIndex = currentIndex + 1
-        if nextIndex < currentQueue.count {
-            currentIndex = nextIndex
-            if let track = currentQueue[safe: currentIndex] {
-                loadAndPlay(track)
-            }
-        } else if repeatMode == .all {
-            currentIndex = 0
-            if let track = currentQueue[safe: 0] {
-                loadAndPlay(track)
-            }
-        } else {
-            isPlaying = false
-            player?.pause()
-        }
+        let action = queue.next()
+        syncPublishedFromQueue()
+        apply(action)
     }
 
     func previous() {
-        guard !currentQueue.isEmpty else { return }
-
-        if currentTime > 3 {
-            seek(to: 0)
-            return
-        }
-
-        let prevIndex = currentIndex - 1
-        if prevIndex >= 0 {
-            currentIndex = prevIndex
-            if let track = currentQueue[safe: currentIndex] {
-                loadAndPlay(track)
-            }
-        } else if repeatMode == .all {
-            currentIndex = currentQueue.count - 1
-            if let track = currentQueue[safe: currentIndex] {
-                loadAndPlay(track)
-            }
-        } else {
-            seek(to: 0)
-        }
+        let action = queue.previous(currentTime: currentTime)
+        syncPublishedFromQueue()
+        apply(action)
     }
 
     func seek(to time: Double) {
@@ -223,30 +174,47 @@ final class AudioPlayerManager: ObservableObject {
     // MARK: - Shuffle Toggle
 
     func toggleShuffle() {
-        shuffleEnabled.toggle()
-        guard !currentQueue.isEmpty, let current = currentTrack else { return }
-
-        if shuffleEnabled {
-            unshuffledQueue = currentQueue
-            var shuffled = currentQueue.filter { $0.id != current.id }
-            shuffled.shuffle()
-            shuffled.insert(current, at: 0)
-            currentQueue = shuffled
-            currentIndex = 0
-        } else {
-            if let idx = unshuffledQueue.firstIndex(where: { $0.id == current.id }) {
-                currentQueue = unshuffledQueue
-                currentIndex = idx
-            }
+        queue.toggleShuffle(currentTrackID: currentTrack?.id)
+        // Keep the published flag in sync without retriggering the didSet
+        // (which would write back into `queue`).
+        if shuffleEnabled != queue.shuffleEnabled {
+            shuffleEnabled = queue.shuffleEnabled
         }
+        syncPublishedFromQueue()
     }
 
     func cycleRepeatMode() {
-        switch repeatMode {
-        case .off: repeatMode = .all
-        case .all: repeatMode = .one
-        case .one: repeatMode = .off
+        queue.cycleRepeatMode()
+        if repeatMode != queue.repeatMode {
+            repeatMode = queue.repeatMode
         }
+    }
+
+    // MARK: - Action Dispatch
+
+    private func apply(_ action: PlaybackQueue.Action) {
+        switch action {
+        case .load(let index):
+            if let track = queue.currentQueue[safe: index] {
+                loadAndPlay(track)
+            }
+        case .restart:
+            seek(to: 0)
+            player?.play()
+            isPlaying = true
+        case .seekToZero:
+            seek(to: 0)
+        case .stop:
+            isPlaying = false
+            player?.pause()
+        case .noop:
+            break
+        }
+    }
+
+    private func syncPublishedFromQueue() {
+        if currentQueue != queue.currentQueue { currentQueue = queue.currentQueue }
+        if currentIndex != queue.currentIndex { currentIndex = queue.currentIndex }
     }
 
     // MARK: - Private Helpers

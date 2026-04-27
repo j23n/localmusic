@@ -32,3 +32,27 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
         ENABLE_PREVIEWS: YES
+
+  LocalMusicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - LocalMusicTests
+    dependencies:
+      - target: LocalMusic
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/LocalMusic.app/LocalMusic
+
+schemes:
+  LocalMusic:
+    build:
+      targets:
+        LocalMusic: all
+        LocalMusicTests: [test]
+    test:
+      targets:
+        - LocalMusicTests

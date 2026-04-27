@@ -23,9 +23,22 @@ enum LyricsCache {
     private static let ioQueue = DispatchQueue(label: "com.folderplayer.lyricsCache",
                                                qos: .userInitiated)
 
+    #if DEBUG
+    /// Test-only override. When non-nil, all cache files are written here
+    /// instead of `Documents/Lyrics/`. Set sequentially in `setUp` /
+    /// `tearDown`; not safe for parallel test plans.
+    static var directoryOverride: URL?
+    #endif
+
     private static var directory: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let url = docs.appendingPathComponent("Lyrics", isDirectory: true)
+        let url: URL = {
+            #if DEBUG
+            if let override = directoryOverride { return override }
+            #endif
+            return FileManager.default
+                .urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Lyrics", isDirectory: true)
+        }()
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

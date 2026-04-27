@@ -315,7 +315,8 @@ struct SyncedLyricsView: View {
 
     /// Binary-searches for the largest index whose timestamp is `<= currentTime`.
     /// Replaces a per-tick linear scan over potentially hundreds of lines.
-    private var activeIndex: Int {
+    /// Exposed as a static helper so tests can verify it without a `View`.
+    static func activeIndex(in lines: [SyncedLyricLine], at currentTime: Double) -> Int {
         guard !lines.isEmpty else { return 0 }
         var lo = 0
         var hi = lines.count - 1
@@ -330,6 +331,10 @@ struct SyncedLyricsView: View {
             }
         }
         return best
+    }
+
+    private var activeIndex: Int {
+        Self.activeIndex(in: lines, at: currentTime)
     }
 
     var body: some View {
