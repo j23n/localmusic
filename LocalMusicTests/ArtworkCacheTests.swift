@@ -5,6 +5,10 @@ import UIKit
 /// Disk-touching tests for `ArtworkCache`. Each test redirects the cache
 /// directory at a temp folder via `directoryOverride` so files don't leak
 /// into the simulator's `Documents/Artwork/`.
+///
+/// Marked `@MainActor` because `writePNG` uses `UIGraphicsImageRenderer`,
+/// which is `@MainActor`-isolated in the iOS 18 SDK.
+@MainActor
 final class ArtworkCacheTests: XCTestCase {
 
     private var tempDir: URL!

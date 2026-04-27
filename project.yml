@@ -52,7 +52,7 @@ schemes:
     build:
       targets:
         LocalMusic: all
-        LocalMusicTests: [test]
+        LocalMusicTests: all
     test:
       targets:
         - LocalMusicTests
