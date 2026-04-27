@@ -16,8 +16,8 @@ private enum PlaylistItem: Identifiable {
 
 struct PlaylistDetailView: View {
     @Binding var playlist: Playlist
-    @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var player: AudioPlayerManager
+    @Environment(LibraryStore.self) private var library
+    @Environment(AudioPlayerManager.self) private var player
     @State private var showAddTracks = false
 
     /// Resolves URLs to tracks via the store's O(1) lookup. Memoizing this
@@ -218,7 +218,7 @@ struct MissingTrackRow: View {
 
 struct AddTracksSheet: View {
     @Binding var playlist: Playlist
-    @EnvironmentObject private var library: LibraryStore
+    @Environment(LibraryStore.self) private var library
     @Environment(\.dismiss) private var dismiss
 
     @State private var searchDraft = ""

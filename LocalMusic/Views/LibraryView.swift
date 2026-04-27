@@ -4,7 +4,7 @@ struct LibraryView: View {
     // Intentionally does NOT observe `AudioPlayerManager`: that would force
     // a body re-render on every 0.5 s playback tick. Per-row playback state
     // is read inside `TrackRowButton`, where the cost is bounded.
-    @EnvironmentObject private var library: LibraryStore
+    @Environment(LibraryStore.self) private var library
     @State private var showSettings = false
     @State private var searchDraft = ""
 
@@ -201,8 +201,8 @@ struct LibraryView: View {
 /// each time `player.currentTrack` ticks.
 private struct TrackRowButton: View {
     let track: Track
-    @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var player: AudioPlayerManager
+    @Environment(LibraryStore.self) private var library
+    @Environment(AudioPlayerManager.self) private var player
 
     var body: some View {
         Button {

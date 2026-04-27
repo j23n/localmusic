@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MiniPlayerView: View {
-    @EnvironmentObject private var player: AudioPlayerManager
+    @Environment(AudioPlayerManager.self) private var player
     let onTap: () -> Void
 
     private var progress: Double {

@@ -2,9 +2,11 @@ import SwiftUI
 
 @main
 struct LocalMusicApp: App {
-    @StateObject private var player = AudioPlayerManager()
-    @StateObject private var library = LibraryStore()
+    @State private var player = AudioPlayerManager()
+    @State private var library = LibraryStore()
     @State private var selectedTab = 0
+
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -29,8 +31,8 @@ struct LocalMusicApp: App {
                     }
                     .tag(2)
             }
-            .environmentObject(player)
-            .environmentObject(library)
+            .environment(player)
+            .environment(library)
             .task {
                 await library.bootstrap()
                 if let url = library.folderURL {
@@ -42,6 +44,11 @@ struct LocalMusicApp: App {
                     player.startAccessingFolder(url)
                 }
             }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await library.checkForExternalChanges() }
+                }
+            }
         }
     }
 }
@@ -49,7 +56,7 @@ struct LocalMusicApp: App {
 // MARK: - Mini Player Modifier
 
 private struct MiniPlayerModifier: ViewModifier {
-    @EnvironmentObject var player: AudioPlayerManager
+    @Environment(AudioPlayerManager.self) private var player
     let onTap: () -> Void
 
     func body(content: Content) -> some View {

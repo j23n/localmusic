@@ -11,6 +11,10 @@ xcodebuild test \
 
 CI runs the suite on every PR via `.github/workflows/test.yml`.
 
+Tests use [Swift Testing](https://developer.apple.com/xcode/swift-testing/)
+(`@Test`, `#expect`, `#require`). XCTest assertions and `XCTestCase`
+subclasses are not used.
+
 ## Layout
 
 | File | Coverage |
@@ -29,9 +33,9 @@ CI runs the suite on every PR via `.github/workflows/test.yml`.
 
 These keep the production code testable. Don't remove without a replacement.
 
-- `PlaybackQueue` (`LocalMusic/PlaybackQueue.swift`) — pure value-type state machine. `AudioPlayerManager` delegates to it and applies a returned `Action`.
+- `PlaybackQueue` (`LocalMusic/Services/PlaybackQueue.swift`) — pure value-type state machine. `AudioPlayerManager` delegates to it and applies a returned `Action`.
 - `PersistenceManager.init(documentsURL:userDefaults:)` — tests inject a temp dir and a private `UserDefaults` suite.
-- `ArtworkCache.directoryOverride` / `LyricsCache.directoryOverride` — `#if DEBUG` only. Set in `setUp` / cleared in `tearDown`. Not parallel-test safe.
+- `ArtworkCache.directoryOverride` / `LyricsCache.directoryOverride` — `#if DEBUG` only, declared `nonisolated(unsafe)`. Set in `init` / cleared in `deinit`. Suites that touch them carry `@Suite(.serialized)` so cases inside the same suite can't race; cross-suite parallelism with shared globals is still a known limitation.
 - `LibraryStore._testSeedTracks` / `_testWaitForApply` / `_testSetFolderURL` — `#if DEBUG` only. Drive the display pipeline without disk.
 - `SyncedLyricsView.activeIndex(in:at:)` — static helper so tests don't need a `View`.
 
@@ -43,4 +47,4 @@ Open work, ordered by value:
 2. **UI smoke tests** (XCUITest). `UIDocumentPickerViewController` can't be driven from XCUITest, so requires a debug-only `--demo-library` launch arg pointing at a fixture folder bundled with the UI test runner. Cover: onboarding → folder selection → tap row → mini-player → Now Playing tab → transport controls.
 3. **Deterministic `_testFlushIO`** on `ArtworkCache` / `LyricsCache`. `remove` currently polls disk for up to 1 s. A `ioQueue.sync {}` helper would remove the flake risk on loaded CI.
 4. **DEBUG-tunable debounce** on `LibraryStore.scheduleApply`. The 250 ms sleep makes search-pipeline tests slow; an injectable interval keeps the suite fast.
-5. **Parallel-test safety** for the cache `directoryOverride` hooks. Either thread the directory through an instance, or document the constraint via an `xctestplan` that disables parallelization.
+5. **Cross-suite cache isolation.** `directoryOverride` is shared global state; if cache-touching suites are ever allowed to run in parallel with each other, instance-level injection (or an `xctestplan` that disables parallelization) is needed.

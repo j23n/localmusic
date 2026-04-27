@@ -1,11 +1,13 @@
 import Foundation
+import Observation
 import SwiftUI
 
 /// Central store for the user's music library. Owns the slim `Track` array,
 /// a URL → Track lookup, debounced/filtered display state, and folder scan
 /// orchestration.
+@Observable
 @MainActor
-final class LibraryStore: ObservableObject {
+final class LibraryStore {
 
     enum SortOption: String, CaseIterable, Identifiable, Sendable {
         case title, artist, album, duration
@@ -31,23 +33,23 @@ final class LibraryStore: ObservableObject {
         }
     }
 
-    // MARK: - Published State
+    // MARK: - Observed State
 
-    @Published private(set) var tracks: [Track] = []
-    @Published private(set) var displayTracks: [Track] = []
-    @Published private(set) var sections: [LibrarySection] = []
-    @Published private(set) var playlists: [Playlist] = []
-    @Published private(set) var folderURL: URL?
-    @Published private(set) var lastSynced: Date?
-    @Published private(set) var isScanning: Bool = false
-    @Published private(set) var isFiltering: Bool = false
-    @Published private(set) var scanProgress: ScanProgress?
+    private(set) var tracks: [Track] = []
+    private(set) var displayTracks: [Track] = []
+    private(set) var sections: [LibrarySection] = []
+    private(set) var playlists: [Playlist] = []
+    private(set) var folderURL: URL?
+    private(set) var lastSynced: Date?
+    private(set) var isScanning: Bool = false
+    private(set) var isFiltering: Bool = false
+    private(set) var scanProgress: ScanProgress?
 
-    @Published var searchText: String = "" {
+    var searchText: String = "" {
         didSet { scheduleApply() }
     }
 
-    @Published var sortOption: SortOption = .title {
+    var sortOption: SortOption = .title {
         didSet {
             UserDefaults.standard.set(sortOption.rawValue, forKey: Self.sortDefaultsKey)
             scheduleApply(immediate: true)
@@ -56,10 +58,10 @@ final class LibraryStore: ObservableObject {
 
     // MARK: - Internal Indexes
 
-    private var tracksByURL: [URL: Track] = [:]
-    private var searchKeys: [String] = []
-    private var applyTask: Task<Void, Never>?
-    private var scanAccessURL: URL?
+    @ObservationIgnored private var tracksByURL: [URL: Track] = [:]
+    @ObservationIgnored private var searchKeys: [String] = []
+    @ObservationIgnored private var applyTask: Task<Void, Never>?
+    @ObservationIgnored private var scanAccessURL: URL?
 
     private static let sortDefaultsKey = "librarySort"
 
@@ -142,6 +144,14 @@ final class LibraryStore: ObservableObject {
         } else {
             playlists = MetadataLoader.scanPlaylists(in: folderURL)
         }
+    }
+
+    /// Cheap resume hook: short-circuits when the folder mtime hasn't moved
+    /// past the last successful sync. Called from the app's `scenePhase`
+    /// listener so files added while we were backgrounded show up without a
+    /// manual reload.
+    func checkForExternalChanges() async {
+        await rescanIfNeeded()
     }
 
     /// Forces a full rescan regardless of mtime. No-op if a scan is already
@@ -264,7 +274,7 @@ final class LibraryStore: ObservableObject {
                 query: captureSearch,
                 sort: captureSort
             ), !Task.isCancelled else { return }
-            await MainActor.run { [weak self] in
+            await MainActor.run {
                 guard let self else { return }
                 self.displayTracks = output.0
                 self.sections = output.1
@@ -354,7 +364,7 @@ final class LibraryStore: ObservableObject {
 
 // MARK: - Sectioning
 
-struct LibrarySection: Identifiable, Equatable {
+struct LibrarySection: Identifiable, Equatable, Sendable {
     var id: String { title }
     let title: String
     let tracks: [Track]
@@ -406,9 +416,9 @@ extension LibraryStore {
     nonisolated private static func bucketByDuration(_ tracks: [Track]) -> [LibrarySection] {
         let buckets: [(String, ClosedRange<Double>)] = [
             ("Under 1 min", 0...59.999),
-            ("1–3 min",     60...179.999),
-            ("3–5 min",     180...299.999),
-            ("5–10 min",    300...599.999),
+            ("1\u{2013}3 min",     60...179.999),
+            ("3\u{2013}5 min",     180...299.999),
+            ("5\u{2013}10 min",    300...599.999),
             ("10+ min",     600...Double.greatestFiniteMagnitude)
         ]
         var grouped: [String: [Track]] = [:]

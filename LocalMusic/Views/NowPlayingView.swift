@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct NowPlayingView: View {
-    @EnvironmentObject private var player: AudioPlayerManager
+    @Environment(AudioPlayerManager.self) private var player
     @State private var showLyrics = false
     @State private var lyrics: TrackLyrics?
     @State private var lyricsTrackID: UUID?

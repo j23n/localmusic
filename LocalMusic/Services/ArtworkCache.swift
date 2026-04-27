@@ -20,14 +20,17 @@ enum ArtworkCache {
         return cache
     }()
 
-    private static let ioQueue = DispatchQueue(label: "com.folderplayer.artworkCache",
+    private static let ioQueue = DispatchQueue(label: "com.localmusic.artworkCache",
                                                qos: .userInitiated)
 
     #if DEBUG
     /// Test-only override. When non-nil, all cache files are written here
     /// instead of `Documents/Artwork/`. Set sequentially in `setUp` /
     /// `tearDown`; not safe for parallel test plans.
-    static var directoryOverride: URL?
+    ///
+    /// `nonisolated(unsafe)` because this is a DEBUG-only test seam that
+    /// tests serialize themselves; production code never writes it.
+    nonisolated(unsafe) static var directoryOverride: URL?
     #endif
 
     private static var directory: URL {

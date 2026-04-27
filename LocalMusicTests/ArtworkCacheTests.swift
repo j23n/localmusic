@@ -1,4 +1,5 @@
-import XCTest
+import Foundation
+import Testing
 import UIKit
 @testable import LocalMusic
 
@@ -6,14 +7,16 @@ import UIKit
 /// directory at a temp folder via `directoryOverride` so files don't leak
 /// into the simulator's `Documents/Artwork/`.
 ///
-/// Marked `@MainActor` because `writePNG` uses `UIGraphicsImageRenderer`,
-/// which is `@MainActor`-isolated in the iOS 18 SDK.
+/// `@MainActor` because `writePNG` uses `UIGraphicsImageRenderer`, which is
+/// `@MainActor`-isolated in the iOS 18 SDK. `.serialized` because the
+/// `directoryOverride` test seam is shared global state.
 @MainActor
-final class ArtworkCacheTests: XCTestCase {
+@Suite(.serialized)
+final class ArtworkCacheTests {
 
-    private var tempDir: URL!
+    private let tempDir: URL
 
-    override func setUpWithError() throws {
+    init() throws {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ArtworkCacheTests-\(UUID().uuidString)",
                                     isDirectory: true)
@@ -22,33 +25,31 @@ final class ArtworkCacheTests: XCTestCase {
         ArtworkCache.purgeMemoryCaches()
     }
 
-    override func tearDownWithError() throws {
+    deinit {
         ArtworkCache.directoryOverride = nil
         ArtworkCache.purgeMemoryCaches()
-        if let tempDir, FileManager.default.fileExists(atPath: tempDir.path) {
-            try FileManager.default.removeItem(at: tempDir)
-        }
+        try? FileManager.default.removeItem(at: tempDir)
     }
 
     // MARK: - key + fileURL
 
-    func testKey_isDeterministicAndPathDependent() {
+    @Test func key_isDeterministicAndPathDependent() {
         let a = URL(fileURLWithPath: "/x/song.mp3")
         let b = URL(fileURLWithPath: "/x/other.mp3")
-        XCTAssertEqual(ArtworkCache.key(for: a), ArtworkCache.key(for: a))
-        XCTAssertNotEqual(ArtworkCache.key(for: a), ArtworkCache.key(for: b))
+        #expect(ArtworkCache.key(for: a) == ArtworkCache.key(for: a))
+        #expect(ArtworkCache.key(for: a) != ArtworkCache.key(for: b))
     }
 
-    func testKey_collapsesDotSegments() {
+    @Test func key_collapsesDotSegments() {
         let a = URL(fileURLWithPath: "/x/song.mp3")
         let b = URL(fileURLWithPath: "/x/./song.mp3")
-        XCTAssertEqual(ArtworkCache.key(for: a), ArtworkCache.key(for: b))
+        #expect(ArtworkCache.key(for: a) == ArtworkCache.key(for: b))
     }
 
-    func testFileURL_livesUnderConfiguredDirectory() {
+    @Test func fileURL_livesUnderConfiguredDirectory() {
         let track = URL(fileURLWithPath: "/x/song.mp3")
         let cacheURL = ArtworkCache.fileURL(for: track)
-        XCTAssertTrue(
+        #expect(
             cacheURL.standardized.path.hasPrefix(tempDir.standardized.path),
             "cache file \(cacheURL.path) should live under override \(tempDir.path)"
         )
@@ -56,86 +57,86 @@ final class ArtworkCacheTests: XCTestCase {
 
     // MARK: - storeSync / hasArtwork / remove
 
-    func testStoreSync_writesFileAndExposesHasArtwork() {
+    @Test func storeSync_writesFileAndExposesHasArtwork() {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         let bytes = Data(repeating: 0xCD, count: 32)
 
-        XCTAssertFalse(ArtworkCache.hasArtwork(for: url))
+        #expect(!ArtworkCache.hasArtwork(for: url))
         ArtworkCache.storeSync(bytes, for: url)
-        XCTAssertTrue(ArtworkCache.hasArtwork(for: url))
+        #expect(ArtworkCache.hasArtwork(for: url))
 
         let onDisk = try? Data(contentsOf: ArtworkCache.fileURL(for: url))
-        XCTAssertEqual(onDisk, bytes)
+        #expect(onDisk == bytes)
     }
 
-    func testRemove_deletesFileAndClearsMemoryCache() async throws {
+    @Test func remove_deletesFileAndClearsMemoryCache() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 4, height: 4, to: ArtworkCache.fileURL(for: url))
 
         // Populate the in-memory cache.
         _ = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2)
-        XCTAssertNotNil(ArtworkCache.cachedThumbnail(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
 
         ArtworkCache.remove(for: url)
 
         // remove() schedules disk I/O on a background queue; assert eventually.
-        XCTAssertNil(ArtworkCache.cachedThumbnail(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) == nil)
         try await waitForFileToDisappear(at: ArtworkCache.fileURL(for: url))
-        XCTAssertFalse(ArtworkCache.hasArtwork(for: url))
+        #expect(!ArtworkCache.hasArtwork(for: url))
     }
 
     // MARK: - thumbnail / fullImage
 
-    func testThumbnail_returnsImageForValidArtwork() async throws {
+    @Test func thumbnail_returnsImageForValidArtwork() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 64, height: 64, to: ArtworkCache.fileURL(for: url))
 
         let thumb = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2)
-        let image = try XCTUnwrap(thumb)
+        let image = try #require(thumb)
         // ImageIO downsamples to <= maxPixel (pointSize * scale = 64).
-        XCTAssertLessThanOrEqual(image.size.width, 64)
-        XCTAssertLessThanOrEqual(image.size.height, 64)
+        #expect(image.size.width <= 64)
+        #expect(image.size.height <= 64)
     }
 
-    func testThumbnail_returnsNilForMissingArtwork() async {
+    @Test func thumbnail_returnsNilForMissingArtwork() async {
         let url = URL(fileURLWithPath: "/x/missing.mp3")
         let thumb = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2)
-        XCTAssertNil(thumb)
+        #expect(thumb == nil)
     }
 
-    func testThumbnail_secondCallHitsMemoryCache() async throws {
+    @Test func thumbnail_secondCallHitsMemoryCache() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 64, height: 64, to: ArtworkCache.fileURL(for: url))
 
-        XCTAssertNil(ArtworkCache.cachedThumbnail(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) == nil)
         _ = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2)
-        XCTAssertNotNil(ArtworkCache.cachedThumbnail(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
     }
 
-    func testFullImage_independentMemoryCacheFromThumbnail() async throws {
+    @Test func fullImage_independentMemoryCacheFromThumbnail() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 128, height: 128, to: ArtworkCache.fileURL(for: url))
 
-        XCTAssertNil(ArtworkCache.cachedFullImage(for: url))
+        #expect(ArtworkCache.cachedFullImage(for: url) == nil)
         _ = await ArtworkCache.fullImage(for: url, pointSize: 100, scale: 2)
-        XCTAssertNotNil(ArtworkCache.cachedFullImage(for: url))
+        #expect(ArtworkCache.cachedFullImage(for: url) != nil)
         // The thumbnail cache shouldn't be populated as a side effect.
-        XCTAssertNil(ArtworkCache.cachedThumbnail(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) == nil)
     }
 
-    func testPurgeMemoryCaches_clearsBothCachesButLeavesDisk() async throws {
+    @Test func purgeMemoryCaches_clearsBothCachesButLeavesDisk() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 32, height: 32, to: ArtworkCache.fileURL(for: url))
 
         _ = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2)
         _ = await ArtworkCache.fullImage(for: url, pointSize: 32, scale: 2)
-        XCTAssertNotNil(ArtworkCache.cachedThumbnail(for: url))
-        XCTAssertNotNil(ArtworkCache.cachedFullImage(for: url))
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
+        #expect(ArtworkCache.cachedFullImage(for: url) != nil)
 
         ArtworkCache.purgeMemoryCaches()
-        XCTAssertNil(ArtworkCache.cachedThumbnail(for: url))
-        XCTAssertNil(ArtworkCache.cachedFullImage(for: url))
-        XCTAssertTrue(ArtworkCache.hasArtwork(for: url), "disk cache should survive purge")
+        #expect(ArtworkCache.cachedThumbnail(for: url) == nil)
+        #expect(ArtworkCache.cachedFullImage(for: url) == nil)
+        #expect(ArtworkCache.hasArtwork(for: url), "disk cache should survive purge")
     }
 
     // MARK: - Helpers
@@ -148,7 +149,7 @@ final class ArtworkCacheTests: XCTestCase {
             UIColor.systemTeal.setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
         }
-        let data = try XCTUnwrap(image.pngData())
+        let data = try #require(image.pngData())
         try data.write(to: url, options: .atomic)
     }
 
@@ -159,6 +160,6 @@ final class ArtworkCacheTests: XCTestCase {
             if !FileManager.default.fileExists(atPath: url.path) { return }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
-        XCTFail("file at \(url.path) was not removed within 1s")
+        Issue.record("file at \(url.path) was not removed within 1s")
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 struct PlaylistsView: View {
     // Doesn't observe `AudioPlayerManager` for the same reason as `LibraryView`:
     // playback ticks shouldn't re-render the playlist list.
-    @EnvironmentObject private var library: LibraryStore
+    @Environment(LibraryStore.self) private var library
     @State private var showNewPlaylistAlert = false
     @State private var newPlaylistName = ""
 
@@ -113,7 +113,7 @@ struct PlaylistsView: View {
 
 struct PlaylistMosaicView: View {
     let trackURLs: [URL]
-    @EnvironmentObject private var library: LibraryStore
+    @Environment(LibraryStore.self) private var library
 
     /// Resolves up to four URLs that have artwork, using the store's O(1)
     /// lookup instead of a per-row linear scan over the library.
