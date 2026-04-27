@@ -17,6 +17,7 @@ final class PersistenceManagerTests {
     private let lyricsOverride: URL
 
     init() throws {
+        CacheTestLock.acquire()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PMTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -37,6 +38,7 @@ final class PersistenceManagerTests {
         LyricsCache.directoryOverride = nil
         defaults.removePersistentDomain(forName: defaultsName)
         try? FileManager.default.removeItem(at: tempDir)
+        CacheTestLock.release()
     }
 
     // MARK: - lastSynced

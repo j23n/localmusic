@@ -366,7 +366,9 @@ struct SyncedLyricsView: View {
 /// Caches the result of `UIImage.dominantColor` per track URL so we don't
 /// re-run the (50–150 ms) CIAreaAverage filter on every Now Playing render.
 enum ArtworkColorCache {
-    private static let storage: NSCache<NSString, UIColor> = {
+    /// `nonisolated(unsafe)` because `NSCache` is internally thread-safe but
+    /// not `Sendable`-marked in the iOS SDK.
+    nonisolated(unsafe) private static let storage: NSCache<NSString, UIColor> = {
         let cache = NSCache<NSString, UIColor>()
         cache.countLimit = 64
         return cache

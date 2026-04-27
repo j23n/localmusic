@@ -14,7 +14,10 @@ struct TrackLyrics: Codable, Hashable, Sendable {
 
 enum LyricsCache {
 
-    private static let memoryCache: NSCache<NSString, NSData> = {
+    /// `nonisolated(unsafe)` because `NSCache` is internally thread-safe but
+    /// not `Sendable`-marked in the iOS SDK, and we read/write it from the
+    /// disk-IO worker.
+    nonisolated(unsafe) private static let memoryCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
         cache.countLimit = 32
         return cache

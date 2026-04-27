@@ -8,13 +8,16 @@ import UIKit
 /// and full-size decodes are kept in bounded `NSCache`s.
 enum ArtworkCache {
 
-    private static let thumbnailMemoryCache: NSCache<NSString, UIImage> = {
+    /// `nonisolated(unsafe)` because `NSCache` is internally thread-safe but
+    /// not `Sendable`-marked in the iOS SDK, and we serve it from arbitrary
+    /// threads (downsample worker, MainActor view code).
+    nonisolated(unsafe) private static let thumbnailMemoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 400
         return cache
     }()
 
-    private static let fullImageMemoryCache: NSCache<NSString, UIImage> = {
+    nonisolated(unsafe) private static let fullImageMemoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 4
         return cache

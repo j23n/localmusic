@@ -33,13 +33,19 @@ final class AudioPlayerManager {
     /// Pure state machine for queue/shuffle/repeat. We mirror the relevant
     /// fields onto the observed properties above after each mutation so the
     /// existing view code keeps observing the same surface.
-    private var queue = PlaybackQueue()
+    @ObservationIgnored private var queue = PlaybackQueue()
 
-    private var player: AVPlayer?
-    private var timeObserver: Any?
-    private var endObserver: NSObjectProtocol?
-    private var statusObserver: NSKeyValueObservation?
-    private var activeSecurityScopedURL: URL?
+    /// AVFoundation/UIKit handles read-and-cleared from `deinit`, which
+    /// Swift 6 treats as nonisolated even when the enclosing class is
+    /// `@MainActor`. They're only ever written from MainActor methods, but
+    /// the deinit is the one place we need to reach them off-actor; the
+    /// `nonisolated(unsafe)` escape hatch keeps the rest of the type
+    /// MainActor-isolated without a separate cleanup actor.
+    @ObservationIgnored nonisolated(unsafe) private var player: AVPlayer?
+    @ObservationIgnored nonisolated(unsafe) private var timeObserver: Any?
+    @ObservationIgnored nonisolated(unsafe) private var endObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var statusObserver: NSKeyValueObservation?
+    @ObservationIgnored nonisolated(unsafe) private var activeSecurityScopedURL: URL?
 
     // MARK: - Init
 

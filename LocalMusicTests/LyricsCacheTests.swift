@@ -10,6 +10,7 @@ final class LyricsCacheTests {
     private let tempDir: URL
 
     init() throws {
+        CacheTestLock.acquire()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LyricsCacheTests-\(UUID().uuidString)",
                                     isDirectory: true)
@@ -22,6 +23,7 @@ final class LyricsCacheTests {
         LyricsCache.directoryOverride = nil
         LyricsCache.purgeMemoryCache()
         try? FileManager.default.removeItem(at: tempDir)
+        CacheTestLock.release()
     }
 
     // MARK: - storeSync / hasLyrics / load

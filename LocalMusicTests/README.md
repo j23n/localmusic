@@ -35,7 +35,7 @@ These keep the production code testable. Don't remove without a replacement.
 
 - `PlaybackQueue` (`LocalMusic/Services/PlaybackQueue.swift`) — pure value-type state machine. `AudioPlayerManager` delegates to it and applies a returned `Action`.
 - `PersistenceManager.init(documentsURL:userDefaults:)` — tests inject a temp dir and a private `UserDefaults` suite.
-- `ArtworkCache.directoryOverride` / `LyricsCache.directoryOverride` — `#if DEBUG` only, declared `nonisolated(unsafe)`. Set in `init` / cleared in `deinit`. Suites that touch them carry `@Suite(.serialized)` so cases inside the same suite can't race; cross-suite parallelism with shared globals is still a known limitation.
+- `ArtworkCache.directoryOverride` / `LyricsCache.directoryOverride` — `#if DEBUG` only, declared `nonisolated(unsafe)`. Set in `init` / cleared in `deinit`. Suites that touch them carry `@Suite(.serialized)` for in-suite ordering, plus `CacheTestLock.acquire()` / `release()` (in `Fixtures.swift`) for cross-suite mutual exclusion against the other cache-touching suites.
 - `LibraryStore._testSeedTracks` / `_testWaitForApply` / `_testSetFolderURL` — `#if DEBUG` only. Drive the display pipeline without disk.
 - `SyncedLyricsView.activeIndex(in:at:)` — static helper so tests don't need a `View`.
 

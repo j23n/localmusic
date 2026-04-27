@@ -17,6 +17,7 @@ final class ArtworkCacheTests {
     private let tempDir: URL
 
     init() throws {
+        CacheTestLock.acquire()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ArtworkCacheTests-\(UUID().uuidString)",
                                     isDirectory: true)
@@ -29,6 +30,7 @@ final class ArtworkCacheTests {
         ArtworkCache.directoryOverride = nil
         ArtworkCache.purgeMemoryCaches()
         try? FileManager.default.removeItem(at: tempDir)
+        CacheTestLock.release()
     }
 
     // MARK: - key + fileURL
