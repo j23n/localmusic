@@ -3,7 +3,7 @@ import Foundation
 
 /// Per-track lyrics payload (unsynced + synced). Stored on disk so the
 /// in-memory `Track` doesn't carry potentially many KB of text per item.
-struct TrackLyrics: Codable, Hashable {
+struct TrackLyrics: Codable, Hashable, Sendable {
     var unsynced: String?
     var synced: [SyncedLyricLine]?
 
@@ -14,20 +14,26 @@ struct TrackLyrics: Codable, Hashable {
 
 enum LyricsCache {
 
-    private static let memoryCache: NSCache<NSString, NSData> = {
+    /// `nonisolated(unsafe)` because `NSCache` is internally thread-safe but
+    /// not `Sendable`-marked in the iOS SDK, and we read/write it from the
+    /// disk-IO worker.
+    nonisolated(unsafe) private static let memoryCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
         cache.countLimit = 32
         return cache
     }()
 
-    private static let ioQueue = DispatchQueue(label: "com.folderplayer.lyricsCache",
+    private static let ioQueue = DispatchQueue(label: "com.localmusic.lyricsCache",
                                                qos: .userInitiated)
 
     #if DEBUG
     /// Test-only override. When non-nil, all cache files are written here
     /// instead of `Documents/Lyrics/`. Set sequentially in `setUp` /
     /// `tearDown`; not safe for parallel test plans.
-    static var directoryOverride: URL?
+    ///
+    /// `nonisolated(unsafe)` because this is a DEBUG-only test seam that
+    /// tests serialize themselves; production code never writes it.
+    nonisolated(unsafe) static var directoryOverride: URL?
     #endif
 
     private static var directory: URL {

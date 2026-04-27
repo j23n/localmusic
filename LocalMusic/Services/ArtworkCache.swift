@@ -8,26 +8,32 @@ import UIKit
 /// and full-size decodes are kept in bounded `NSCache`s.
 enum ArtworkCache {
 
-    private static let thumbnailMemoryCache: NSCache<NSString, UIImage> = {
+    /// `nonisolated(unsafe)` because `NSCache` is internally thread-safe but
+    /// not `Sendable`-marked in the iOS SDK, and we serve it from arbitrary
+    /// threads (downsample worker, MainActor view code).
+    nonisolated(unsafe) private static let thumbnailMemoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 400
         return cache
     }()
 
-    private static let fullImageMemoryCache: NSCache<NSString, UIImage> = {
+    nonisolated(unsafe) private static let fullImageMemoryCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 4
         return cache
     }()
 
-    private static let ioQueue = DispatchQueue(label: "com.folderplayer.artworkCache",
+    private static let ioQueue = DispatchQueue(label: "com.localmusic.artworkCache",
                                                qos: .userInitiated)
 
     #if DEBUG
     /// Test-only override. When non-nil, all cache files are written here
     /// instead of `Documents/Artwork/`. Set sequentially in `setUp` /
     /// `tearDown`; not safe for parallel test plans.
-    static var directoryOverride: URL?
+    ///
+    /// `nonisolated(unsafe)` because this is a DEBUG-only test seam that
+    /// tests serialize themselves; production code never writes it.
+    nonisolated(unsafe) static var directoryOverride: URL?
     #endif
 
     private static var directory: URL {

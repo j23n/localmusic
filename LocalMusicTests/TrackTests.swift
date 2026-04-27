@@ -1,58 +1,59 @@
-import XCTest
+import Foundation
+import Testing
 @testable import LocalMusic
 
-final class TrackTests: XCTestCase {
+struct TrackTests {
 
     // MARK: - Track.stableID
 
-    func testStableID_isDeterministic() {
+    @Test func stableID_isDeterministic() {
         let url = URL(fileURLWithPath: "/Users/me/Music/song.mp3")
-        XCTAssertEqual(Track.stableID(for: url), Track.stableID(for: url))
+        #expect(Track.stableID(for: url) == Track.stableID(for: url))
     }
 
-    func testStableID_differsForDifferentPaths() {
+    @Test func stableID_differsForDifferentPaths() {
         let a = Track.stableID(for: URL(fileURLWithPath: "/a/song.mp3"))
         let b = Track.stableID(for: URL(fileURLWithPath: "/b/song.mp3"))
-        XCTAssertNotEqual(a, b)
+        #expect(a != b)
     }
 
-    func testStableID_collapsesDotSegments() {
+    @Test func stableID_collapsesDotSegments() {
         // `.standardized` removes the `./` so both URLs hash the same path.
         let a = Track.stableID(for: URL(fileURLWithPath: "/Music/Album/song.mp3"))
         let b = Track.stableID(for: URL(fileURLWithPath: "/Music/Album/./song.mp3"))
-        XCTAssertEqual(a, b)
+        #expect(a == b)
     }
 
-    func testStableID_setsRFC4122Bits() {
+    @Test func stableID_setsRFC4122Bits() {
         let id = Track.stableID(for: URL(fileURLWithPath: "/x.mp3"))
         let bytes = withUnsafeBytes(of: id.uuid) { Array($0) }
         // Variant: top two bits of byte 8 must be 0b10
-        XCTAssertEqual(bytes[8] & 0xC0, 0x80)
+        #expect(bytes[8] & 0xC0 == 0x80)
         // Version: top four bits of byte 6 must be 0b0101 (we set version 5)
-        XCTAssertEqual(bytes[6] & 0xF0, 0x50)
+        #expect(bytes[6] & 0xF0 == 0x50)
     }
 
     // MARK: - RepeatMode
 
-    func testRepeatMode_rawValueRoundTrip() {
+    @Test func repeatMode_rawValueRoundTrip() {
         for mode in RepeatMode.allCases {
-            XCTAssertEqual(RepeatMode(rawValue: mode.rawValue), mode)
+            #expect(RepeatMode(rawValue: mode.rawValue) == mode)
         }
     }
 
     // MARK: - TrackLyrics
 
-    func testTrackLyrics_isEmpty() {
-        XCTAssertTrue(TrackLyrics(unsynced: nil, synced: nil).isEmpty)
-        XCTAssertTrue(TrackLyrics(unsynced: "", synced: []).isEmpty)
-        XCTAssertFalse(TrackLyrics(unsynced: "lyrics", synced: nil).isEmpty)
-        XCTAssertFalse(TrackLyrics(
+    @Test func trackLyrics_isEmpty() {
+        #expect(TrackLyrics(unsynced: nil, synced: nil).isEmpty)
+        #expect(TrackLyrics(unsynced: "", synced: []).isEmpty)
+        #expect(!TrackLyrics(unsynced: "lyrics", synced: nil).isEmpty)
+        #expect(!TrackLyrics(
             unsynced: nil,
             synced: [SyncedLyricLine(timestamp: 0, text: "hi")]
         ).isEmpty)
     }
 
-    func testTrackLyrics_codableRoundTrip() throws {
+    @Test func trackLyrics_codableRoundTrip() throws {
         let original = TrackLyrics(
             unsynced: "verse one\nverse two",
             synced: [
@@ -62,13 +63,13 @@ final class TrackTests: XCTestCase {
         )
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(TrackLyrics.self, from: data)
-        XCTAssertEqual(decoded, original)
+        #expect(decoded == original)
     }
 
     // MARK: - SyncedLyricLine
 
-    func testSyncedLyricLine_idMatchesTimestamp() {
+    @Test func syncedLyricLine_idMatchesTimestamp() {
         let line = SyncedLyricLine(timestamp: 12.5, text: "test")
-        XCTAssertEqual(line.id, 12.5)
+        #expect(line.id == 12.5)
     }
 }

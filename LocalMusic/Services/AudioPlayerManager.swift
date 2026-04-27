@@ -1,43 +1,51 @@
 import AVFoundation
-import Combine
 import MediaPlayer
+import Observation
 import UIKit
 
-final class AudioPlayerManager: ObservableObject {
+@Observable
+@MainActor
+final class AudioPlayerManager {
 
-    // MARK: - Published State
+    // MARK: - Observed State
 
-    @Published var currentTrack: Track?
-    @Published var isPlaying: Bool = false
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
-    @Published var shuffleEnabled: Bool = false {
+    var currentTrack: Track?
+    var isPlaying: Bool = false
+    var currentTime: Double = 0
+    var duration: Double = 0
+    var shuffleEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(shuffleEnabled, forKey: "shuffleEnabled")
             queue.shuffleEnabled = shuffleEnabled
         }
     }
-    @Published var repeatMode: RepeatMode = .off {
+    var repeatMode: RepeatMode = .off {
         didSet {
             UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode")
             queue.repeatMode = repeatMode
         }
     }
-    @Published var currentQueue: [Track] = []
-    @Published var currentIndex: Int = 0
+    var currentQueue: [Track] = []
+    var currentIndex: Int = 0
 
     // MARK: - Private
 
     /// Pure state machine for queue/shuffle/repeat. We mirror the relevant
-    /// fields onto the `@Published` properties above after each mutation so
-    /// the existing view code keeps observing the same surface.
-    private var queue = PlaybackQueue()
+    /// fields onto the observed properties above after each mutation so the
+    /// existing view code keeps observing the same surface.
+    @ObservationIgnored private var queue = PlaybackQueue()
 
-    private var player: AVPlayer?
-    private var timeObserver: Any?
-    private var endObserver: NSObjectProtocol?
-    private var statusObserver: NSKeyValueObservation?
-    private var activeSecurityScopedURL: URL?
+    /// AVFoundation/UIKit handles read-and-cleared from `deinit`, which
+    /// Swift 6 treats as nonisolated even when the enclosing class is
+    /// `@MainActor`. They're only ever written from MainActor methods, but
+    /// the deinit is the one place we need to reach them off-actor; the
+    /// `nonisolated(unsafe)` escape hatch keeps the rest of the type
+    /// MainActor-isolated without a separate cleanup actor.
+    @ObservationIgnored nonisolated(unsafe) private var player: AVPlayer?
+    @ObservationIgnored nonisolated(unsafe) private var timeObserver: Any?
+    @ObservationIgnored nonisolated(unsafe) private var endObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var statusObserver: NSKeyValueObservation?
+    @ObservationIgnored nonisolated(unsafe) private var activeSecurityScopedURL: URL?
 
     // MARK: - Init
 
@@ -57,9 +65,11 @@ final class AudioPlayerManager: ObservableObject {
     }
 
     deinit {
-        removeTimeObserver()
-        if let obs = endObserver {
-            NotificationCenter.default.removeObserver(obs)
+        if let timeObserver {
+            player?.removeTimeObserver(timeObserver)
+        }
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
         }
         statusObserver?.invalidate()
         activeSecurityScopedURL?.stopAccessingSecurityScopedResource()
@@ -72,7 +82,7 @@ final class AudioPlayerManager: ObservableObject {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to configure audio session: \(error)")
+            Log.player.error("Failed to configure audio session: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -82,28 +92,29 @@ final class AudioPlayerManager: ObservableObject {
         let center = MPRemoteCommandCenter.shared()
 
         center.playCommand.addTarget { [weak self] _ in
-            self?.togglePlayPause()
+            Task { @MainActor in self?.togglePlayPause() }
             return .success
         }
 
         center.pauseCommand.addTarget { [weak self] _ in
-            self?.togglePlayPause()
+            Task { @MainActor in self?.togglePlayPause() }
             return .success
         }
 
         center.nextTrackCommand.addTarget { [weak self] _ in
-            self?.next()
+            Task { @MainActor in self?.next() }
             return .success
         }
 
         center.previousTrackCommand.addTarget { [weak self] _ in
-            self?.previous()
+            Task { @MainActor in self?.previous() }
             return .success
         }
 
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            self?.seek(to: event.positionTime)
+            let position = event.positionTime
+            Task { @MainActor in self?.seek(to: position) }
             return .success
         }
     }
@@ -221,9 +232,9 @@ final class AudioPlayerManager: ObservableObject {
 
     private func loadAndPlay(_ track: Track) {
         removeTimeObserver()
-        if let obs = endObserver {
-            NotificationCenter.default.removeObserver(obs)
-            endObserver = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
         }
         statusObserver?.invalidate()
         statusObserver = nil
@@ -242,24 +253,26 @@ final class AudioPlayerManager: ObservableObject {
 
         // Wait for the item to be ready before playing.
         //
-        // The KVO callback is dispatched onto the main queue, but rapid track
-        // changes can leave a queued .readyToPlay block in flight after we've
-        // moved on. Comparing `observedItem` against the captured `item`
-        // (and against the player's current item) drops those stale calls.
-        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] observedItem, _ in
-            DispatchQueue.main.async {
+        // The KVO callback runs on a background thread; hop to MainActor and
+        // re-check that the player is still pointing at the same item, since
+        // rapid track changes can leave a queued .readyToPlay block in flight
+        // after we've moved on.
+        let observedItemRef = ObjectIdentifier(item)
+        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self] observedItem, _ in
+            let status = observedItem.status
+            let errorDescription = observedItem.error.map { String(describing: $0) } ?? "nil"
+            Task { @MainActor [weak self] in
                 guard let self,
-                      let item,
-                      observedItem === item,
-                      self.player?.currentItem === item
+                      let currentItem = self.player?.currentItem,
+                      ObjectIdentifier(currentItem) == observedItemRef
                 else { return }
-                switch observedItem.status {
+                switch status {
                 case .readyToPlay:
                     self.player?.play()
                     self.isPlaying = true
                     self.updateNowPlayingInfo()
                 case .failed:
-                    print("AVPlayerItem failed: \(String(describing: observedItem.error))")
+                    Log.player.error("AVPlayerItem failed: \(errorDescription, privacy: .public)")
                     self.isPlaying = false
                 case .unknown:
                     break
@@ -276,31 +289,33 @@ final class AudioPlayerManager: ObservableObject {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            self?.next()
+            Task { @MainActor in self?.next() }
         }
     }
 
     private func addTimeObserver() {
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self else { return }
             let seconds = CMTimeGetSeconds(time)
-            if !seconds.isNaN && !seconds.isInfinite {
-                self.currentTime = seconds
-            }
-            if let itemDuration = self.player?.currentItem?.duration {
-                let dur = CMTimeGetSeconds(itemDuration)
-                if !dur.isNaN && !dur.isInfinite {
-                    self.duration = dur
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !seconds.isNaN && !seconds.isInfinite {
+                    self.currentTime = seconds
+                }
+                if let itemDuration = self.player?.currentItem?.duration {
+                    let dur = CMTimeGetSeconds(itemDuration)
+                    if !dur.isNaN && !dur.isInfinite {
+                        self.duration = dur
+                    }
                 }
             }
         }
     }
 
     private func removeTimeObserver() {
-        if let obs = timeObserver {
-            player?.removeTimeObserver(obs)
-            timeObserver = nil
+        if let timeObserver {
+            player?.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
         }
     }
 
@@ -333,7 +348,7 @@ final class AudioPlayerManager: ObservableObject {
             Task { [weak self] in
                 guard let image = await ArtworkCache.thumbnail(for: url, pointSize: 256, scale: scale)
                 else { return }
-                await MainActor.run { [weak self] in
+                await MainActor.run {
                     guard let self,
                           self.currentTrack?.url == url,
                           var info = MPNowPlayingInfoCenter.default().nowPlayingInfo

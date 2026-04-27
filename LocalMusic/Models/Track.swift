@@ -1,24 +1,6 @@
 import CryptoKit
 import Foundation
 
-// MARK: - RepeatMode
-
-enum RepeatMode: String, Codable, CaseIterable {
-    case off
-    case all
-    case one
-}
-
-// MARK: - Synced Lyric Line
-
-struct SyncedLyricLine: Identifiable, Codable, Hashable {
-    var id: Double { timestamp }
-    let timestamp: Double // seconds
-    let text: String
-}
-
-// MARK: - Track
-
 /// Slim representation of a single audio file. Heavy payloads (artwork bytes,
 /// lyrics) are stored out-of-band in `ArtworkCache` / `LyricsCache` and looked
 /// up on demand. The `id` is derived from the file URL so it stays stable
@@ -57,14 +39,4 @@ struct Track: Identifiable, Codable, Hashable, Sendable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
-}
-
-// MARK: - Playlist (discovered from .m3u / .m3u8 / .pls files)
-
-struct Playlist: Identifiable {
-    var id: URL { fileURL }
-    let fileURL: URL
-    let name: String
-    var trackURLs: [URL]
-    var rawPaths: [String]
 }

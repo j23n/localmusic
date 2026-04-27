@@ -1,6 +1,19 @@
 import Foundation
 @testable import LocalMusic
 
+/// Process-wide lock taken by every test suite that mutates the shared
+/// `ArtworkCache.directoryOverride` / `LyricsCache.directoryOverride`
+/// globals. `@Suite(.serialized)` only serializes within a suite, but
+/// these globals are read by all three of our cache-touching suites
+/// (`ArtworkCacheTests`, `LyricsCacheTests`, `PersistenceManagerTests`),
+/// so we serialize across suites via this lock.
+enum CacheTestLock {
+    nonisolated(unsafe) private static let lock = NSLock()
+
+    static func acquire() { lock.lock() }
+    static func release() { lock.unlock() }
+}
+
 /// Shared helpers for building lightweight `Track` values without touching
 /// the filesystem. The URL is synthesized; tests that need real files build
 /// their own.

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject private var library: LibraryStore
+    @Environment(LibraryStore.self) private var library
 
     @Environment(\.dismiss) private var dismiss
     @State private var showFolderPicker = false

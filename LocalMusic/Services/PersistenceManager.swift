@@ -1,11 +1,14 @@
 import Foundation
 
-final class PersistenceManager {
+/// `@unchecked Sendable` because every stored property is immutable after init
+/// and all mutation runs through the serial `ioQueue` (or `UserDefaults`,
+/// which is itself thread-safe).
+final class PersistenceManager: @unchecked Sendable {
 
     static let shared = PersistenceManager()
 
     private let fileManager = FileManager.default
-    private let ioQueue = DispatchQueue(label: "com.folderplayer.persistence",
+    private let ioQueue = DispatchQueue(label: "com.localmusic.persistence",
                                         qos: .userInitiated)
     private let documentsURL: URL
     private let defaults: UserDefaults
@@ -38,7 +41,7 @@ final class PersistenceManager {
             )
             defaults.set(bookmarkData, forKey: "folderBookmark")
         } catch {
-            print("Failed to save folder bookmark: \(error)")
+            Log.persistence.error("Failed to save folder bookmark: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -57,7 +60,7 @@ final class PersistenceManager {
             }
             return url
         } catch {
-            print("Failed to resolve folder bookmark: \(error)")
+            Log.persistence.error("Failed to resolve folder bookmark: \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }
@@ -81,7 +84,7 @@ final class PersistenceManager {
             let data = try Data(contentsOf: libraryURL)
             return Self.decodeAndMigrate(data)
         } catch {
-            print("Failed to load library: \(error)")
+            Log.library.error("Failed to load library: \(error.localizedDescription, privacy: .public)")
             return []
         }
     }
@@ -97,7 +100,7 @@ final class PersistenceManager {
                     let data = try Data(contentsOf: url)
                     cont.resume(returning: Self.decodeAndMigrate(data))
                 } catch {
-                    print("Failed to load library: \(error)")
+                    Log.library.error("Failed to load library: \(error.localizedDescription, privacy: .public)")
                     cont.resume(returning: [])
                 }
             }
@@ -113,7 +116,7 @@ final class PersistenceManager {
                     let data = try JSONEncoder().encode(tracks)
                     try data.write(to: url, options: .atomic)
                 } catch {
-                    print("Failed to save library: \(error)")
+                    Log.library.error("Failed to save library: \(error.localizedDescription, privacy: .public)")
                 }
                 cont.resume()
             }

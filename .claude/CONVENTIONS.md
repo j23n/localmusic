@@ -24,21 +24,21 @@ it, mirror the change to all three repos (see [Sync](#sync) at the bottom).
 
 | Convention | localgallery | localcontacts | localmusic |
 |---|---|---|---|
-| Deployment target iOS 18 | ❌ iOS 17 | ✅ | ❌ iOS 17 |
-| Swift 6 strict concurrency | ❌ Swift 5, `minimal` | ✅ Swift 6, `complete` | ❌ Swift 5, none |
-| `@Observable` state | ❌ `ObservableObject` | ✅ | ❌ `ObservableObject` |
+| Deployment target iOS 18 | ❌ iOS 17 | ✅ | ✅ |
+| Swift 6 strict concurrency | ❌ Swift 5, `minimal` | ✅ Swift 6, `complete` | ✅ Swift 6, `complete` |
+| `@Observable` state | ❌ `ObservableObject` | ✅ | ✅ |
 | Decomposed Store + Services | ❌ one mega-manager | ✅ | ✅ |
-| `Models/` `Services/` `Views/` layout | ❌ flat | ✅ | ❌ flat |
-| `Log.<category>` (`os.Logger`) | ✅ | ❌ `print` | ❌ `print` |
+| `Models/` `Services/` `Views/` layout | ❌ flat | ✅ | ✅ |
+| `Log.<category>` (`os.Logger`) | ✅ | ❌ `print` | ✅ |
 | SHA-256 stable IDs | ❌ MD5 | n/a | ✅ |
-| Swift Testing | ❌ no tests | ✅ | ❌ XCTest |
+| Swift Testing | ❌ no tests | ✅ | ✅ |
 | Tests in CI | ❌ | ✅ (in build.yml) | ✅ (separate test.yml) |
-| `macos-26` runner | ✅ | ❌ `macos-15` | ❌ `macos-15` |
-| Bundle ID `com.localX.app` | ✅ | ✅ | ❌ `com.folderplayer` |
+| `macos-26` runner | ✅ | ❌ `macos-15` | ✅ |
+| Bundle ID `com.localX.app` | ✅ | ✅ | ✅ |
 | Settings UX (`List` + sections) | ✅ canonical | ✅ | ✅ |
 | Folder access flow | ✅ | ✅ | ✅ |
 | Atomic file writes | ✅ | ✅ | ✅ |
-| Scene-phase rescan | ❌ | ✅ | ❌ |
+| Scene-phase rescan | ❌ | ✅ | ✅ |
 
 Each `❌` should be tracked by a migration issue in the relevant repo.
 
@@ -799,12 +799,7 @@ What the user does on first launch: pick a folder, optional permissions, etc.
 |---|---|---|
 | localgallery | `com.localgallery.app` | `com.localgallery` |
 | localcontacts | `com.localcontacts.app` | `com.localcontacts` |
-| localmusic | `com.localmusic.app` (target) | `com.localmusic` |
-
-**localmusic note.** The current bundle ID is `com.folderplayer` (legacy).
-Renaming requires a new App Store record if the app is published.
-Confirm App Store status before changing — there is no migration once
-shipped.
+| localmusic | `com.localmusic.app` | `com.localmusic` |
 
 Extension targets append a sub-id: `com.localgallery.app.widgets`,
 `com.localX.app.tests`.
