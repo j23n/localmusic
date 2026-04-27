@@ -23,15 +23,22 @@ enum ArtworkCache {
     private static let ioQueue = DispatchQueue(label: "com.folderplayer.artworkCache",
                                                qos: .userInitiated)
 
+    #if DEBUG
     /// Test-only override. When non-nil, all cache files are written here
-    /// instead of `Documents/Artwork/`. Production code never sets this.
+    /// instead of `Documents/Artwork/`. Set sequentially in `setUp` /
+    /// `tearDown`; not safe for parallel test plans.
     static var directoryOverride: URL?
+    #endif
 
     private static var directory: URL {
-        let url = directoryOverride
-            ?? FileManager.default
+        let url: URL = {
+            #if DEBUG
+            if let override = directoryOverride { return override }
+            #endif
+            return FileManager.default
                 .urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Artwork", isDirectory: true)
+        }()
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

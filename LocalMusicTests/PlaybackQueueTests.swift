@@ -37,7 +37,33 @@ final class PlaybackQueueTests: XCTestCase {
         XCTAssertEqual(action, .noop)
     }
 
+    func testPlay_invalidStartIndex_returnsNoopRegardlessOfShuffle() {
+        let tracks = Fixtures.tracks(3)
+
+        var off = PlaybackQueue()
+        XCTAssertEqual(off.play(track: tracks[0], queue: tracks, startIndex: 99), .noop)
+        XCTAssertEqual(off.play(track: tracks[0], queue: tracks, startIndex: -1), .noop)
+        XCTAssertTrue(off.currentQueue.isEmpty, "invalid input must not mutate state")
+
+        var on = PlaybackQueue()
+        on.shuffleEnabled = true
+        XCTAssertEqual(on.play(track: tracks[0], queue: tracks, startIndex: 99), .noop)
+        XCTAssertTrue(on.currentQueue.isEmpty)
+    }
+
     // MARK: - setQueue()
+
+    func testSetQueue_shuffleOff_keepsOrderAndStartIndex() {
+        var q = PlaybackQueue()
+        let tracks = Fixtures.tracks(4)
+
+        let action = q.setQueue(tracks, startIndex: 2)
+
+        XCTAssertEqual(action, .load(2))
+        XCTAssertEqual(q.currentQueue.map(\.id), tracks.map(\.id))
+        XCTAssertEqual(q.currentIndex, 2)
+        XCTAssertEqual(q.unshuffledQueue.map(\.id), tracks.map(\.id))
+    }
 
     func testSetQueue_invalidStartIndex_returnsNoop() {
         var q = PlaybackQueue()
@@ -114,7 +140,7 @@ final class PlaybackQueueTests: XCTestCase {
         XCTAssertEqual(q.currentIndex, 1)
     }
 
-    func testPrevious_atThreeSecondsExactly_returnsSeekToZero() {
+    func testPrevious_atThreeSecondsExactly_movesToPrevTrack() {
         var q = PlaybackQueue()
         let tracks = Fixtures.tracks(3)
         _ = q.play(track: tracks[1], queue: tracks, startIndex: 1)

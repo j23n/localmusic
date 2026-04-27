@@ -40,23 +40,22 @@ struct PlaybackQueue: Equatable {
 
     /// Begin playback of `track` from a fresh `queue`. With shuffle enabled,
     /// the played track is pinned at index 0 and the rest of the queue is
-    /// shuffled around it.
+    /// shuffled around it. Returns `.noop` on an invalid `startIndex` so the
+    /// caller's `track` is never silently swapped for a different element.
     mutating func play(track: Track, queue: [Track], startIndex: Int) -> Action {
+        guard queue.indices.contains(startIndex) else { return .noop }
         unshuffledQueue = queue
         if shuffleEnabled {
             var shuffled = queue
-            if startIndex >= 0, startIndex < shuffled.count {
-                shuffled.remove(at: startIndex)
-                shuffled.shuffle()
-                shuffled.insert(track, at: 0)
-            }
+            shuffled.remove(at: startIndex)
+            shuffled.shuffle()
+            shuffled.insert(track, at: 0)
             currentQueue = shuffled
             currentIndex = 0
         } else {
             currentQueue = queue
             currentIndex = startIndex
         }
-        guard currentQueue.indices.contains(currentIndex) else { return .noop }
         return .load(currentIndex)
     }
 
