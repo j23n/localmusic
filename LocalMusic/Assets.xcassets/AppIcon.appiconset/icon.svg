@@ -1,120 +1,75 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <!-- Background: same deep warm dark as FolderGallery -->
+    <!-- Red background -->
     <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1E1B2E"/>
-      <stop offset="100%" stop-color="#100E19"/>
+      <stop offset="0%" stop-color="#C0392B"/>
+      <stop offset="100%" stop-color="#8B1A1A"/>
     </linearGradient>
-
-    <!-- Folder surfaces -->
-    <linearGradient id="folderBody" x1="512" y1="375" x2="512" y2="795" gradientUnits="userSpaceOnUse">
+    <!-- Neutral beige folder -->
+    <linearGradient id="folderBody" x1="512" y1="320" x2="512" y2="810" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#F5EADB"/>
       <stop offset="100%" stop-color="#E2CDAF"/>
     </linearGradient>
-    <linearGradient id="folderTab" x1="310" y1="275" x2="310" y2="375" gradientUnits="userSpaceOnUse">
+    <linearGradient id="folderTab" x1="300" y1="220" x2="300" y2="320" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#FAF2E8"/>
       <stop offset="100%" stop-color="#EEDDCA"/>
     </linearGradient>
-
-    <!-- Equalizer bar gradient: warm amber to coral -->
-    <linearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0%" stop-color="#F7D26B"/>
-      <stop offset="50%" stop-color="#F0A672"/>
-      <stop offset="100%" stop-color="#E86B5A"/>
-    </linearGradient>
-
-    <!-- Dark panel background -->
-    <linearGradient id="panel" x1="512" y1="432" x2="512" y2="728" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1A1828"/>
-      <stop offset="100%" stop-color="#12101C"/>
-    </linearGradient>
-
-    <!-- Shadows -->
+    <radialGradient id="vinylDisc" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#2C2C2C"/>
+      <stop offset="60%" stop-color="#1E1E1E"/>
+      <stop offset="100%" stop-color="#111"/>
+    </radialGradient>
+    <radialGradient id="vinylLabel" cx="0.45" cy="0.42" r="0.55">
+      <stop offset="0%" stop-color="#F06060"/>
+      <stop offset="100%" stop-color="#B83030"/>
+    </radialGradient>
     <filter id="folderShadow">
-      <feDropShadow dx="0" dy="10" stdDeviation="22" flood-color="#000" flood-opacity="0.5"/>
+      <feDropShadow dx="0" dy="8" stdDeviation="20" flood-color="#000" flood-opacity="0.35"/>
     </filter>
-    <filter id="photoShadow">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.25"/>
+    <filter id="contentShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#000" flood-opacity="0.3"/>
     </filter>
-    <filter id="barGlow">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <!-- Clip for panel -->
-    <clipPath id="panelClip">
-      <rect x="240" y="432" width="544" height="296" rx="10"/>
-    </clipPath>
   </defs>
 
   <!-- Background -->
   <rect width="1024" height="1024" fill="url(#bg)"/>
+  <ellipse cx="512" cy="540" rx="380" ry="300" fill="#fff" opacity="0.06"/>
 
-  <!-- Subtle ambient glow -->
-  <ellipse cx="512" cy="580" rx="340" ry="260" fill="#2E2844" opacity="0.6"/>
-
-  <!-- ====== FOLDER ====== -->
+  <!-- FOLDER -->
   <g filter="url(#folderShadow)">
-    <!-- Tab -->
-    <path d="M205,375 L205,320 Q205,288 235,288 L400,288 Q426,288 436,316 L458,375" fill="url(#folderTab)"/>
-    <!-- Body -->
-    <rect x="182" y="375" width="660" height="420" rx="28" fill="url(#folderBody)"/>
+    <path d="M140,320 L140,255 Q140,220 175,220 L375,220 Q405,220 418,250 L445,320" fill="url(#folderTab)"/>
+    <rect x="112" y="320" width="800" height="490" rx="32" fill="url(#folderBody)"/>
   </g>
 
-  <!-- ====== BACK ITEM (tilted, peeking out) ====== -->
-  <g filter="url(#photoShadow)">
-    <rect x="248" y="408" width="556" height="316" rx="14" fill="#FFFFFF"
-          transform="rotate(-2.5, 512, 566)" opacity="0.8"/>
+  <!-- VINYL RECORD -->
+  <g filter="url(#contentShadow)">
+    <circle cx="512" cy="565" r="195" fill="url(#vinylDisc)"/>
+    <!-- Grooves -->
+    <circle cx="512" cy="565" r="185" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="176" fill="none" stroke="#333" stroke-width="0.6" opacity="0.4"/>
+    <circle cx="512" cy="565" r="167" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="158" fill="none" stroke="#333" stroke-width="0.6" opacity="0.4"/>
+    <circle cx="512" cy="565" r="149" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="140" fill="none" stroke="#333" stroke-width="0.6" opacity="0.4"/>
+    <circle cx="512" cy="565" r="131" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="122" fill="none" stroke="#333" stroke-width="0.6" opacity="0.4"/>
+    <circle cx="512" cy="565" r="113" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="104" fill="none" stroke="#333" stroke-width="0.6" opacity="0.4"/>
+    <circle cx="512" cy="565" r="95" fill="none" stroke="#363636" stroke-width="0.8" opacity="0.5"/>
+    <circle cx="512" cy="565" r="86" fill="none" stroke="#333" stroke-width="0.6" opacity="0.3"/>
+    <!-- Subtle shine arc -->
+    <path d="M365,440 Q480,400 660,470" fill="none" stroke="#fff" stroke-width="3" opacity="0.05"/>
+    <path d="M370,445 Q485,410 655,475" fill="none" stroke="#fff" stroke-width="8" opacity="0.03"/>
+    <!-- Red label -->
+    <circle cx="512" cy="565" r="62" fill="url(#vinylLabel)"/>
+    <circle cx="512" cy="565" r="61" fill="none" stroke="#fff" stroke-width="0.5" opacity="0.15"/>
+    <!-- Label text lines -->
+    <rect x="490" y="548" width="44" height="5" rx="2.5" fill="#fff" opacity="0.25"/>
+    <rect x="484" y="558" width="56" height="4" rx="2" fill="#fff" opacity="0.15"/>
+    <rect x="488" y="567" width="48" height="4" rx="2" fill="#fff" opacity="0.12"/>
+    <!-- Center hole -->
+    <circle cx="512" cy="565" r="7" fill="#1A1A1A"/>
+    <circle cx="512" cy="565" r="4.5" fill="#111"/>
+    <circle cx="510" cy="563" r="1.5" fill="#fff" opacity="0.15"/>
   </g>
-
-  <!-- ====== FRONT PANEL FRAME ====== -->
-  <g filter="url(#photoShadow)">
-    <rect x="232" y="424" width="560" height="312" rx="14" fill="#FFFFFF"/>
-  </g>
-
-  <!-- ====== DARK AUDIO PANEL ====== -->
-  <g clip-path="url(#panelClip)">
-    <rect x="240" y="432" width="544" height="296" fill="url(#panel)"/>
-
-    <!-- Subtle grid lines -->
-    <line x1="240" y1="492" x2="784" y2="492" stroke="#2A2840" stroke-width="1"/>
-    <line x1="240" y1="552" x2="784" y2="552" stroke="#2A2840" stroke-width="1"/>
-    <line x1="240" y1="612" x2="784" y2="612" stroke="#2A2840" stroke-width="1"/>
-    <line x1="240" y1="672" x2="784" y2="672" stroke="#2A2840" stroke-width="1"/>
-
-    <!-- ====== EQUALIZER BARS ====== -->
-    <g filter="url(#barGlow)">
-      <!-- 9 bars, centered, varying heights to form a pleasing waveform shape -->
-      <!-- Bar positions: centered around x=512, spaced 48px apart, each 32px wide -->
-      <!-- Heights create a bell-curve shape peaking in the center -->
-
-      <!-- Bar 1 (leftmost) -->
-      <rect x="320" y="618" width="32" height="90" rx="6" fill="url(#barGrad)" opacity="0.75"/>
-      <!-- Bar 2 -->
-      <rect x="368" y="568" width="32" height="140" rx="6" fill="url(#barGrad)" opacity="0.82"/>
-      <!-- Bar 3 -->
-      <rect x="416" y="508" width="32" height="200" rx="6" fill="url(#barGrad)" opacity="0.88"/>
-      <!-- Bar 4 -->
-      <rect x="464" y="478" width="32" height="230" rx="6" fill="url(#barGrad)" opacity="0.94"/>
-      <!-- Bar 5 (center, tallest) -->
-      <rect x="496" y="458" width="32" height="250" rx="6" fill="url(#barGrad)"/>
-      <!-- Bar 6 -->
-      <rect x="528" y="488" width="32" height="220" rx="6" fill="url(#barGrad)" opacity="0.94"/>
-      <!-- Bar 7 -->
-      <rect x="576" y="528" width="32" height="180" rx="6" fill="url(#barGrad)" opacity="0.88"/>
-      <!-- Bar 8 -->
-      <rect x="624" y="578" width="32" height="130" rx="6" fill="url(#barGrad)" opacity="0.82"/>
-      <!-- Bar 9 (rightmost) -->
-      <rect x="672" y="628" width="32" height="80" rx="6" fill="url(#barGrad)" opacity="0.75"/>
-    </g>
-
-    <!-- Subtle reflection on bars -->
-    <rect x="320" y="708" width="384" height="20" rx="4" fill="#F7D26B" opacity="0.04"/>
-  </g>
-
-  <!-- Subtle inner border on panel -->
-  <rect x="240" y="432" width="544" height="296" rx="10" fill="none" stroke="#000" stroke-opacity="0.06" stroke-width="1.5"/>
 </svg>
