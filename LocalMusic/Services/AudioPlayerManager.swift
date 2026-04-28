@@ -334,7 +334,7 @@ final class AudioPlayerManager {
 
         if let image = ArtworkCache.cachedFullImage(for: track.url)
             ?? ArtworkCache.cachedThumbnail(for: track.url) {
-            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
             info[MPMediaItemPropertyArtwork] = artwork
         }
 
@@ -353,7 +353,7 @@ final class AudioPlayerManager {
                           self.currentTrack?.url == url,
                           var info = MPNowPlayingInfoCenter.default().nowPlayingInfo
                     else { return }
-                    info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = info
                 }
             }
