@@ -3,6 +3,10 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var showFolderPicker = false
 
@@ -22,8 +26,10 @@ struct SettingsView: View {
                     }
                     .tint(.primary)
 
-                    Button("Reload Music") {
+                    Button {
                         Task { await library.rescan() }
+                    } label: {
+                        Label("Reload Music", systemImage: "arrow.clockwise")
                     }
                     .disabled(library.folderURL == nil || library.isScanning)
 
@@ -55,6 +61,7 @@ struct SettingsView: View {
                 Section("Info") {
                     LabeledContent("Total Songs", value: "\(library.tracks.count)")
                     LabeledContent("Total Playlists", value: "\(library.playlists.count)")
+                    LabeledContent("Version", value: appVersion)
                 }
             }
             .navigationTitle("Settings")
