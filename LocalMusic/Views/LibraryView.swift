@@ -6,6 +6,7 @@ struct LibraryView: View {
     // is read inside `TrackRowButton`, where the cost is bounded.
     @Environment(LibraryStore.self) private var library
     @State private var showSettings = false
+    @State private var showFolderPicker = false
     @State private var searchDraft = ""
 
     var body: some View {
@@ -65,32 +66,44 @@ struct LibraryView: View {
     }
 
     private var onboardingView: some View {
-        VStack(spacing: 20) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.accentColor.opacity(0.12))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 40))
-                    .foregroundColor(Color.accentColor)
-            }
-            Text("No Music Folder Selected")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("Choose a folder containing your audio files to get started.")
-                .font(.body)
+        VStack(spacing: 24) {
+            Spacer()
+
+            Image(systemName: "music.note.house")
+                .font(.system(size: 64))
                 .foregroundStyle(.secondary)
+
+            Text("Welcome to LocalMusic")
+                .font(.title2.bold())
+
+            Text("Select a folder containing your audio files to get started.")
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 32)
+
             Button {
-                showSettings = true
+                showFolderPicker = true
             } label: {
-                Label("Get Started", systemImage: "gear")
+                Label("Choose Folder", systemImage: "folder")
                     .font(.headline)
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.horizontal, 48)
+
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showFolderPicker) {
+            DocumentPicker { pickerURL in
+                _ = pickerURL.startAccessingSecurityScopedResource()
+                PersistenceManager.shared.saveFolderBookmark(pickerURL)
+                pickerURL.stopAccessingSecurityScopedResource()
+                Task {
+                    await library.adoptSavedFolder()
+                }
+            }
+        }
     }
 
     private var emptyStateView: some View {
@@ -118,16 +131,16 @@ struct LibraryView: View {
     private var scanningView: some View {
         VStack(spacing: 12) {
             ProgressView()
-            if let progress = library.scanProgress, progress.total > 0 {
-                Text("Scanning \(progress.completed) of \(progress.total)…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            } else {
-                Text("Scanning folder…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            Group {
+                if let progress = library.scanProgress, progress.total > 0 {
+                    Text("Scanning \(progress.completed) of \(progress.total)…")
+                        .monospacedDigit()
+                } else {
+                    Text("Scanning folder…")
+                }
             }
+            .font(.callout)
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
