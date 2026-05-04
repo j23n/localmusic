@@ -1,6 +1,6 @@
 name: LocalMusic
 options:
-  bundleIdPrefix: com.localmusic
+  bundleIdPrefix: com.j23n.localmusic
   deploymentTarget:
     iOS: "18.0"
   xcodeVersion: "16.0"
@@ -19,7 +19,7 @@ targets:
       - LocalMusic
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.localmusic.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.j23n.localmusic.app
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: 1
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -48,7 +48,7 @@ targets:
       - target: LocalMusic
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.localmusic.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.j23n.localmusic.app.tests
         GENERATE_INFOPLIST_FILE: YES
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/LocalMusic.app/LocalMusic
