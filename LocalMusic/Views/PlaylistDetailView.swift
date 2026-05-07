@@ -125,9 +125,11 @@ struct PlaylistDetailView: View {
                                      isPlaying: player.currentTrack?.id == track.id)
                         }
                         .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     case .missing(_, let rawPath):
                         MissingTrackRow(rawPath: rawPath)
                             .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     }
                 }
                 .onMove { from, to in
@@ -161,6 +163,8 @@ struct PlaylistDetailView: View {
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(.compact)
+        .environment(\.defaultMinListRowHeight, 0)
         .contentMargins(.bottom, 80, for: .scrollContent)
     }
 
