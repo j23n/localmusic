@@ -69,8 +69,11 @@ enum LyricsCache {
             try? FileManager.default.removeItem(at: target)
             return
         }
-        if let data = try? JSONEncoder().encode(lyrics) {
-            try? data.write(to: target, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(lyrics)
+            try data.write(to: target, options: .atomic)
+        } catch {
+            Log.cache.warning("Failed to write lyrics: \(error.localizedDescription)")
         }
     }
 

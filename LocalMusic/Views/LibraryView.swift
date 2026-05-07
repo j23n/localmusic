@@ -183,15 +183,16 @@ struct LibraryView: View {
                         .textCase(.uppercase)
                         .tracking(0.5)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 4)
                 }
                 .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
 
                 ForEach(sections, id: \.title) { section in
                     Section {
                         ForEach(section.tracks) { track in
                             TrackRowButton(track: track)
                                 .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
                     } header: {
                         Text(section.title)
@@ -203,6 +204,8 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        .listSectionSpacing(.compact)
+        .environment(\.defaultMinListRowHeight, 0)
         .contentMargins(.bottom, 80, for: .scrollContent)
     }
 }
@@ -293,7 +296,7 @@ struct TrackRow: View {
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     private func formatDuration(_ seconds: Double) -> String {

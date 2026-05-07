@@ -25,7 +25,11 @@ struct DocumentPicker: UIViewControllerRepresentable {
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
+            guard let url = urls.first else {
+                Log.ui.debug("Document picker dismissed without selection")
+                return
+            }
+            Log.ui.info("Folder picked: \(url.lastPathComponent)")
             onPick(url)
         }
     }

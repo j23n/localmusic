@@ -41,7 +41,7 @@ final class PersistenceManager: @unchecked Sendable {
             )
             defaults.set(bookmarkData, forKey: "folderBookmark")
         } catch {
-            Log.persistence.error("Failed to save folder bookmark: \(error.localizedDescription, privacy: .public)")
+            Log.persistence.error("Failed to save folder bookmark: \(error.localizedDescription)")
         }
     }
 
@@ -60,7 +60,7 @@ final class PersistenceManager: @unchecked Sendable {
             }
             return url
         } catch {
-            Log.persistence.error("Failed to resolve folder bookmark: \(error.localizedDescription, privacy: .public)")
+            Log.persistence.error("Failed to resolve folder bookmark: \(error.localizedDescription)")
             return nil
         }
     }
@@ -84,7 +84,7 @@ final class PersistenceManager: @unchecked Sendable {
             let data = try Data(contentsOf: libraryURL)
             return Self.decodeAndMigrate(data)
         } catch {
-            Log.library.error("Failed to load library: \(error.localizedDescription, privacy: .public)")
+            Log.library.error("Failed to load library: \(error.localizedDescription)")
             return []
         }
     }
@@ -100,7 +100,7 @@ final class PersistenceManager: @unchecked Sendable {
                     let data = try Data(contentsOf: url)
                     cont.resume(returning: Self.decodeAndMigrate(data))
                 } catch {
-                    Log.library.error("Failed to load library: \(error.localizedDescription, privacy: .public)")
+                    Log.library.error("Failed to load library: \(error.localizedDescription)")
                     cont.resume(returning: [])
                 }
             }
@@ -116,7 +116,7 @@ final class PersistenceManager: @unchecked Sendable {
                     let data = try JSONEncoder().encode(tracks)
                     try data.write(to: url, options: .atomic)
                 } catch {
-                    Log.library.error("Failed to save library: \(error.localizedDescription, privacy: .public)")
+                    Log.library.error("Failed to save library: \(error.localizedDescription)")
                 }
                 cont.resume()
             }

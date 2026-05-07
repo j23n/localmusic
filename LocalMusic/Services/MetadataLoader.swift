@@ -30,6 +30,7 @@ struct MetadataLoader {
                            onProgress: (@Sendable (ScanProgress) -> Void)? = nil) async -> [Track] {
         let audioURLs = collectAudioFiles(in: url)
         let total = audioURLs.count
+        Log.scan.info("Scan folder: \(url.lastPathComponent) — found \(total) audio files")
         guard total > 0 else {
             onProgress?(ScanProgress(completed: 0, total: 0))
             return []
@@ -349,6 +350,7 @@ struct MetadataLoader {
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
             // Try Latin-1 as fallback
             guard let content = try? String(contentsOf: url, encoding: .isoLatin1) else {
+                Log.scan.warning("Failed to read playlist: \(url.lastPathComponent)")
                 return nil
             }
             return parsePlaylistContent(content, url: url)
@@ -433,14 +435,22 @@ struct MetadataLoader {
             content = buildM3U(trackURLs: playlist.trackURLs, baseDir: baseDir)
         }
 
-        try? content.write(to: playlist.fileURL, atomically: true, encoding: .utf8)
+        do {
+            try content.write(to: playlist.fileURL, atomically: true, encoding: .utf8)
+        } catch {
+            Log.persistence.error("Failed to write playlist \(playlist.fileURL.lastPathComponent): \(error.localizedDescription)")
+        }
     }
 
     static func createPlaylist(name: String, in directory: URL) -> Playlist {
         let fileURL = directory.appendingPathComponent("\(name).m3u")
         let playlist = Playlist(fileURL: fileURL, name: name, trackURLs: [], rawPaths: [])
         let content = "#EXTM3U\n"
-        try? content.write(to: fileURL, atomically: true, encoding: .utf8)
+        do {
+            try content.write(to: fileURL, atomically: true, encoding: .utf8)
+        } catch {
+            Log.persistence.error("Failed to create playlist \(fileURL.lastPathComponent): \(error.localizedDescription)")
+        }
         return playlist
     }
 

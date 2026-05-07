@@ -8,6 +8,10 @@ struct LocalMusicApp: App {
 
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        Log.ui.info("App launched")
+    }
+
     var body: some Scene {
         WindowGroup {
             TabView(selection: $selectedTab) {
@@ -41,10 +45,12 @@ struct LocalMusicApp: App {
             }
             .onChange(of: library.folderURL) { _, newValue in
                 if let url = newValue {
+                    Log.ui.info("Folder URL changed: \(url.lastPathComponent)")
                     player.startAccessingFolder(url)
                 }
             }
             .onChange(of: scenePhase) { _, phase in
+                Log.ui.debug("Scene phase: \(String(describing: phase))")
                 if phase == .active {
                     Task { await library.checkForExternalChanges() }
                 }

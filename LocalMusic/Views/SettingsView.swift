@@ -3,11 +3,14 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
 
+    private static let githubURL = URL(string: "https://github.com/j23n/localmusic")!
+
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
     }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var showFolderPicker = false
 
     var body: some View {
@@ -58,10 +61,43 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Info") {
+                Section("Stats") {
                     LabeledContent("Total Songs", value: "\(library.tracks.count)")
                     LabeledContent("Total Playlists", value: "\(library.playlists.count)")
+                }
+
+                Section("Diagnostics") {
+                    NavigationLink {
+                        LogsView()
+                    } label: {
+                        Label("Logs", systemImage: "doc.text.magnifyingglass")
+                    }
                     LabeledContent("Version", value: appVersion)
+                }
+
+                Section("About") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("LocalMusic plays audio files from a folder of your choice — no streaming, no accounts.")
+                            .font(.callout)
+
+                        Text("Found a bug or have feedback? Open an issue or get in touch:")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+
+                    Button {
+                        openURL(Self.githubURL)
+                    } label: {
+                        LabeledContent {
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                    }
+                    .tint(.primary)
                 }
             }
             .navigationTitle("Settings")

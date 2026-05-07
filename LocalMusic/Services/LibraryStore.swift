@@ -113,12 +113,15 @@ final class LibraryStore {
     /// Loads cached tracks (if any) and the playlist list, then triggers an
     /// incremental rescan when the folder mtime indicates changes.
     func bootstrap() async {
+        Log.library.info("Bootstrap starting (folderURL: \(folderURL?.lastPathComponent ?? "nil"))")
         let cached = await PersistenceManager.shared.loadLibraryAsync()
+        Log.library.info("Loaded \(cached.count) cached tracks")
         await ingest(tracks: cached, persist: false)
 
         if let url = folderURL {
             startScanAccess(url)
             playlists = MetadataLoader.scanPlaylists(in: url)
+            Log.library.info("Loaded \(playlists.count) playlists from \(url.lastPathComponent)")
             await rescanIfNeeded()
         }
     }
@@ -157,11 +160,18 @@ final class LibraryStore {
     /// Forces a full rescan regardless of mtime. No-op if a scan is already
     /// running so concurrent triggers (Reload + pull-to-refresh) don't race.
     func rescan() async {
-        guard let folderURL else { return }
-        guard !isScanning else { return }
+        guard let folderURL else {
+            Log.library.warning("Rescan requested but no folder selected")
+            return
+        }
+        guard !isScanning else {
+            Log.library.debug("Rescan requested while scan already running — ignoring")
+            return
+        }
         startScanAccess(folderURL)
         isScanning = true
         scanProgress = nil
+        Log.library.info("Rescan starting: \(folderURL.lastPathComponent)")
 
         let scanned = await MetadataLoader.scanFolder(at: folderURL) { [weak self] progress in
             Task { @MainActor [weak self] in
@@ -170,10 +180,13 @@ final class LibraryStore {
         }
 
         if !scanned.isEmpty {
+            Log.library.info("Rescan complete: \(scanned.count) tracks")
             await ingest(tracks: scanned, persist: true)
             let now = Date()
             PersistenceManager.shared.saveLastSynced(now)
             lastSynced = now
+        } else {
+            Log.library.warning("Rescan returned 0 tracks — keeping cached library")
         }
         // If `scanned` is empty (likely a transient access failure) we
         // intentionally keep the cached library rather than blowing it away.
@@ -187,7 +200,11 @@ final class LibraryStore {
     /// the synchronous `startAccessingSecurityScopedResource` dance) and
     /// kicks off a full rescan against the resolved URL.
     func adoptSavedFolder() async {
-        guard let resolved = PersistenceManager.shared.loadFolderBookmark() else { return }
+        guard let resolved = PersistenceManager.shared.loadFolderBookmark() else {
+            Log.library.warning("adoptSavedFolder: no bookmark to resolve")
+            return
+        }
+        Log.library.info("Adopted folder: \(resolved.lastPathComponent)")
         folderURL = resolved
         startScanAccess(resolved)
         await rescan()
@@ -213,6 +230,7 @@ final class LibraryStore {
     }
 
     func savePlaylist(_ playlist: Playlist) {
+        Log.library.debug("Save playlist: \(playlist.name) (\(playlist.trackURLs.count) tracks)")
         if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
             playlists[idx] = playlist
         }
@@ -221,16 +239,28 @@ final class LibraryStore {
 
     func deletePlaylists(at offsets: IndexSet) {
         for idx in offsets {
-            try? FileManager.default.removeItem(at: playlists[idx].fileURL)
+            Log.library.info("Delete playlist: \(playlists[idx].name)")
+            do {
+                try FileManager.default.removeItem(at: playlists[idx].fileURL)
+            } catch {
+                Log.library.error("Failed to delete playlist file: \(error.localizedDescription)")
+            }
         }
         playlists.remove(atOffsets: offsets)
     }
 
     func createPlaylist(name: String) -> Playlist? {
-        guard let folderURL else { return nil }
+        guard let folderURL else {
+            Log.library.warning("createPlaylist: no folder selected")
+            return nil
+        }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty else {
+            Log.library.warning("createPlaylist: empty name rejected")
+            return nil
+        }
         let playlist = MetadataLoader.createPlaylist(name: trimmed, in: folderURL)
+        Log.library.info("Created playlist: \(trimmed)")
         playlists.append(playlist)
         playlists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         return playlist

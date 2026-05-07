@@ -68,7 +68,11 @@ enum ArtworkCache {
     static func store(_ data: Data, for trackURL: URL) {
         let target = fileURL(for: trackURL)
         ioQueue.async {
-            try? data.write(to: target, options: .atomic)
+            do {
+                try data.write(to: target, options: .atomic)
+            } catch {
+                Log.cache.warning("Failed to write artwork: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -76,7 +80,11 @@ enum ArtworkCache {
     /// file to be readable before returning the Track to the caller.
     static func storeSync(_ data: Data, for trackURL: URL) {
         let target = fileURL(for: trackURL)
-        try? data.write(to: target, options: .atomic)
+        do {
+            try data.write(to: target, options: .atomic)
+        } catch {
+            Log.cache.warning("Failed to write artwork: \(error.localizedDescription)")
+        }
     }
 
     static func remove(for trackURL: URL) {

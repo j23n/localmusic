@@ -33,12 +33,15 @@ struct PlaylistsView: View {
                                 playlistRow(playlist)
                             }
                             .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         }
                         .onDelete { offsets in
                             library.deletePlaylists(at: offsets)
                         }
                     }
                     .listStyle(.plain)
+                    .listSectionSpacing(.compact)
+                    .environment(\.defaultMinListRowHeight, 0)
                 }
             }
             .navigationTitle("Playlists")
@@ -105,7 +108,7 @@ struct PlaylistsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 

@@ -82,7 +82,7 @@ final class AudioPlayerManager {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            Log.player.error("Failed to configure audio session: \(error.localizedDescription, privacy: .public)")
+            Log.player.error("Failed to configure audio session: \(error.localizedDescription)")
         }
     }
 
@@ -140,12 +140,14 @@ final class AudioPlayerManager {
     // MARK: - Playback Control
 
     func play(track: Track, queue tracks: [Track], startIndex: Int) {
+        Log.player.info("Play: \(track.title) — \(track.artist) (queue: \(tracks.count), index: \(startIndex))")
         let action = queue.play(track: track, queue: tracks, startIndex: startIndex)
         syncPublishedFromQueue()
         apply(action)
     }
 
     func setQueue(_ tracks: [Track], startIndex: Int) {
+        Log.player.info("Set queue: \(tracks.count) tracks, startIndex: \(startIndex)")
         let action = queue.setQueue(tracks, startIndex: startIndex)
         syncPublishedFromQueue()
         apply(action)
@@ -160,16 +162,19 @@ final class AudioPlayerManager {
             player.play()
             isPlaying = true
         }
+        Log.player.debug("Toggle play/pause → \(isPlaying ? "playing" : "paused")")
         updateNowPlayingElapsed()
     }
 
     func next() {
+        Log.player.debug("Skip to next")
         let action = queue.next()
         syncPublishedFromQueue()
         apply(action)
     }
 
     func previous() {
+        Log.player.debug("Skip to previous (currentTime: \(String(format: "%.1f", currentTime)))")
         let action = queue.previous(currentTime: currentTime)
         syncPublishedFromQueue()
         apply(action)
@@ -191,6 +196,7 @@ final class AudioPlayerManager {
         if shuffleEnabled != queue.shuffleEnabled {
             shuffleEnabled = queue.shuffleEnabled
         }
+        Log.player.info("Shuffle: \(shuffleEnabled ? "on" : "off")")
         syncPublishedFromQueue()
     }
 
@@ -199,6 +205,7 @@ final class AudioPlayerManager {
         if repeatMode != queue.repeatMode {
             repeatMode = queue.repeatMode
         }
+        Log.player.info("Repeat mode: \(repeatMode.rawValue)")
     }
 
     // MARK: - Action Dispatch
@@ -272,7 +279,7 @@ final class AudioPlayerManager {
                     self.isPlaying = true
                     self.updateNowPlayingInfo()
                 case .failed:
-                    Log.player.error("AVPlayerItem failed: \(errorDescription, privacy: .public)")
+                    Log.player.error("AVPlayerItem failed: \(errorDescription)")
                     self.isPlaying = false
                 case .unknown:
                     break
