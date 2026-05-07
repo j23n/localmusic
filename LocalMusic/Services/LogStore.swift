@@ -37,6 +37,12 @@ final class LogStore: @unchecked Sendable {
         if entries.count > maxEntries {
             entries.removeFirst(entries.count - maxEntries)
         }
+        // insert is only called on the main thread (see `append`); hop into
+        // the MainActor isolation domain so we can call into the @MainActor
+        // LogPersistence singleton without an extra task hop.
+        MainActor.assumeIsolated {
+            LogPersistence.shared.scheduleFlush()
+        }
     }
 
     func clear() {

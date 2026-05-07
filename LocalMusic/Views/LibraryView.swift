@@ -8,6 +8,8 @@ struct LibraryView: View {
     @State private var showSettings = false
     @State private var showFolderPicker = false
     @State private var searchDraft = ""
+    @AppStorage("crashReportingEnabled") private var crashReportingEnabled = false
+    private let crashService = CrashDiagnosticsService.shared
 
     var body: some View {
         NavigationStack {
@@ -32,6 +34,14 @@ struct LibraryView: View {
                         showSettings = true
                     } label: {
                         Image(systemName: "gear")
+                            .overlay(alignment: .topTrailing) {
+                                if crashReportingEnabled, crashService.hasPendingCrash {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 8, height: 8)
+                                        .offset(x: 4, y: -4)
+                                }
+                            }
                     }
                 }
             }

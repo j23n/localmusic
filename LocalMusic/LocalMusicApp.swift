@@ -10,6 +10,8 @@ struct LocalMusicApp: App {
 
     init() {
         Log.ui.info("App launched")
+        let enabled = UserDefaults.standard.bool(forKey: "crashReportingEnabled")
+        CrashDiagnosticsService.shared.setEnabled(enabled)
     }
 
     var body: some Scene {

@@ -11,7 +11,10 @@ struct SettingsView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showFolderPicker = false
+    @AppStorage("crashReportingEnabled") private var crashReportingEnabled = false
+    private let crashService = CrashDiagnosticsService.shared
 
     var body: some View {
         NavigationStack {
@@ -64,6 +67,18 @@ struct SettingsView: View {
                 Section("Stats") {
                     LabeledContent("Total Songs", value: "\(library.tracks.count)")
                     LabeledContent("Total Playlists", value: "\(library.playlists.count)")
+                }
+
+                Section {
+                    Toggle("Crash Reporting", isOn: $crashReportingEnabled)
+                } header: {
+                    Text("Crash Reporting")
+                } footer: {
+                    Text("When on, LocalMusic captures crash details and recent log entries on this device. Nothing is sent automatically — if a crash is captured, a banner appears here in Settings and you can choose to share the report with the developer. Logs include file names and folder paths from your library. Off by default. App Store crash analytics (system-level) are unaffected by this setting.")
+                }
+
+                if crashReportingEnabled, crashService.hasPendingCrash {
+                    crashSection
                 }
 
                 Section("Diagnostics") {
@@ -120,6 +135,63 @@ struct SettingsView: View {
                     }
                 }
             }
+            .onChange(of: crashReportingEnabled) { _, newValue in
+                crashService.setEnabled(newValue)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { crashService.refreshPendingCrash() }
+            }
         }
+    }
+
+    @ViewBuilder
+    private var crashSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("LocalMusic crashed last session", systemImage: "exclamationmark.triangle.fill")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Text("A crash report was captured. You can share it with the developer to help diagnose the issue, or dismiss it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+
+            Button {
+                shareCrashReport()
+            } label: {
+                Label("Share Crash Report", systemImage: "square.and.arrow.up")
+            }
+
+            Button(role: .destructive) {
+                crashService.clearPendingCrash()
+            } label: {
+                Label("Dismiss", systemImage: "xmark.circle")
+            }
+        }
+    }
+
+    private func shareCrashReport() {
+        let stamp = Date().formatted(.iso8601.year().month().day())
+        var items: [Any] = []
+
+        if let data = crashService.pendingCrashReport() {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("localmusic-crash-\(stamp).json")
+            if (try? data.write(to: url, options: .atomic)) != nil {
+                items.append(url)
+            }
+        }
+
+        if let data = crashService.recentLogTail() {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("localmusic-logs-\(stamp).txt")
+            if (try? data.write(to: url, options: .atomic)) != nil {
+                items.append(url)
+            }
+        }
+
+        guard !items.isEmpty else { return }
+        ShareSheet.present(items: items)
     }
 }
