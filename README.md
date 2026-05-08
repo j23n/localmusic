@@ -51,6 +51,10 @@ The app is a single-target SwiftUI project with a tab-based layout (Library, Now
 
 Data flows from `AudioPlayerManager` (injected as an `@EnvironmentObject`) down to all views. The library is cached to disk as JSON and refreshed in the background on each launch.
 
+## AI disclaimer
+
+Please see [docs/AI_DISCLAIMER.md].
+
 ## License
 
 [MPL 2.0](LICENSE)
