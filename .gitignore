@@ -1,5 +1,6 @@
 *.xcodeproj
 xcuserdata/
+LocalMusic/Info.plist
 *.xcworkspace
 DerivedData/
 .build/
