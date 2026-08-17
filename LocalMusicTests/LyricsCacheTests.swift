@@ -54,6 +54,29 @@ final class LyricsCacheTests {
         #expect(!LyricsCache.hasLyrics(for: url))
     }
 
+    @Test func storeSync_emptyLyricsClearsMemorySoLoadIsNil() async {
+        let url = URL(fileURLWithPath: "/x/song.mp3")
+        let lyrics = TrackLyrics(unsynced: "verse", synced: nil)
+        LyricsCache.storeSync(lyrics, for: url)
+        #expect(await LyricsCache.load(for: url) == lyrics)
+
+        LyricsCache.storeSync(TrackLyrics(unsynced: nil, synced: nil), for: url)
+        #expect(!LyricsCache.hasLyrics(for: url))
+        #expect(await LyricsCache.load(for: url) == nil,
+                "empty storeSync must drop the in-memory entry, not just the file")
+    }
+
+    @Test func storeSync_replacesStaleMemoryWithNewLyrics() async {
+        let url = URL(fileURLWithPath: "/x/song.mp3")
+        let original = TrackLyrics(unsynced: "old", synced: nil)
+        LyricsCache.storeSync(original, for: url)
+        #expect(await LyricsCache.load(for: url) == original)
+
+        let updated = TrackLyrics(unsynced: "new", synced: [SyncedLyricLine(timestamp: 2.0, text: "later")])
+        LyricsCache.storeSync(updated, for: url)
+        #expect(await LyricsCache.load(for: url) == updated)
+    }
+
     @Test func load_returnsNilWhenMissing() async {
         let url = URL(fileURLWithPath: "/x/never-stored.mp3")
         let loaded = await LyricsCache.load(for: url)

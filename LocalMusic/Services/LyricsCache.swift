@@ -65,13 +65,16 @@ enum LyricsCache {
 
     static func storeSync(_ lyrics: TrackLyrics, for trackURL: URL) {
         let target = fileURL(for: trackURL)
+        let cacheKey = key(for: trackURL) as NSString
         if lyrics.isEmpty {
             try? FileManager.default.removeItem(at: target)
+            memoryCache.removeObject(forKey: cacheKey)
             return
         }
         do {
             let data = try JSONEncoder().encode(lyrics)
             try data.write(to: target, options: .atomic)
+            memoryCache.setObject(data as NSData, forKey: cacheKey)
         } catch {
             Log.cache.warning("Failed to write lyrics: \(error.localizedDescription)")
         }

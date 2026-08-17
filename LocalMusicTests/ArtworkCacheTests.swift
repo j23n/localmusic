@@ -115,6 +115,44 @@ final class ArtworkCacheTests {
         #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
     }
 
+    @Test func thumbnail_differentPixelSizesDoNotShareMemoryEntry() async throws {
+        let url = URL(fileURLWithPath: "/x/song.mp3")
+        try writePNG(width: 128, height: 128, to: ArtworkCache.fileURL(for: url))
+
+        _ = await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 1)
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 32) != nil)
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 64) == nil,
+                "a 32pt decode must not be reused as the 64pt entry")
+
+        _ = await ArtworkCache.thumbnail(for: url, pointSize: 64, scale: 1)
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 64) != nil)
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 32) != nil)
+        // Size-agnostic helper still finds some cached bitmap.
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
+    }
+
+    @Test func storeSync_invalidatesMemorySoNextLoadHitsDisk() async throws {
+        let url = URL(fileURLWithPath: "/x/song.mp3")
+        try writePNG(width: 64, height: 64, color: .systemTeal, to: ArtworkCache.fileURL(for: url))
+
+        let first = try #require(await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2))
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 64) != nil)
+
+        let replacement = try pngData(width: 32, height: 32, color: .systemRed)
+        ArtworkCache.storeSync(replacement, for: url)
+
+        #expect(ArtworkCache.cachedThumbnail(for: url) == nil,
+                "storeSync must drop every in-memory size for this URL")
+        #expect(ArtworkCache.cachedThumbnail(for: url, maxPixel: 64) == nil)
+        #expect(ArtworkCache.hasArtwork(for: url))
+
+        let second = try #require(await ArtworkCache.thumbnail(for: url, pointSize: 32, scale: 2))
+        #expect(ArtworkCache.cachedThumbnail(for: url) != nil)
+        // Reloaded from the replacement PNG, not the stale teal bitmap.
+        #expect(second.size != first.size || second.pngData() != first.pngData())
+    }
+
     @Test func fullImage_independentMemoryCacheFromThumbnail() async throws {
         let url = URL(fileURLWithPath: "/x/song.mp3")
         try writePNG(width: 128, height: 128, to: ArtworkCache.fileURL(for: url))
@@ -145,14 +183,18 @@ final class ArtworkCacheTests {
 
     /// Writes a solid-color PNG to `url`. Uses UIGraphicsImageRenderer so the
     /// output is a real PNG that ImageIO can decode.
-    private func writePNG(width: Int, height: Int, to url: URL) throws {
+    private func writePNG(width: Int, height: Int, color: UIColor = .systemTeal, to url: URL) throws {
+        let data = try pngData(width: width, height: height, color: color)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private func pngData(width: Int, height: Int, color: UIColor) throws -> Data {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height))
         let image = renderer.image { ctx in
-            UIColor.systemTeal.setFill()
+            color.setFill()
             ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
         }
-        let data = try #require(image.pngData())
-        try data.write(to: url, options: .atomic)
+        return try #require(image.pngData())
     }
 
     /// Polls for up to ~1s waiting for the cache file to be removed by the

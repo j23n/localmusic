@@ -43,18 +43,23 @@ struct ArtworkView: View {
             return
         }
         let scale = displayScale > 0 ? displayScale : 2.0
+        let maxPixel = max(pointSize * scale, 1)
         if fullResolution {
-            if let cached = ArtworkCache.cachedFullImage(for: url) {
+            if let cached = ArtworkCache.cachedFullImage(for: url, maxPixel: maxPixel) {
                 image = cached
                 return
             }
-            image = await ArtworkCache.fullImage(for: url, pointSize: pointSize, scale: scale)
+            let loaded = await ArtworkCache.fullImage(for: url, pointSize: pointSize, scale: scale)
+            guard !Task.isCancelled else { return }
+            image = loaded
         } else {
-            if let cached = ArtworkCache.cachedThumbnail(for: url) {
+            if let cached = ArtworkCache.cachedThumbnail(for: url, maxPixel: maxPixel) {
                 image = cached
                 return
             }
-            image = await ArtworkCache.thumbnail(for: url, pointSize: pointSize, scale: scale)
+            let loaded = await ArtworkCache.thumbnail(for: url, pointSize: pointSize, scale: scale)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }

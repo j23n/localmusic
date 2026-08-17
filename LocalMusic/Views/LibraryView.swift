@@ -238,7 +238,8 @@ private struct TrackRowButton: View {
             }
         } label: {
             TrackRow(track: track,
-                     isPlaying: player.currentTrack?.id == track.id)
+                     isCurrent: player.currentTrack?.id == track.id,
+                     isActivelyPlaying: player.isPlaying && player.currentTrack?.id == track.id)
         }
         .contextMenu {
             if !library.playlists.isEmpty {
@@ -267,7 +268,21 @@ private struct TrackRowButton: View {
 
 struct TrackRow: View {
     let track: Track
-    var isPlaying: Bool = false
+    var isCurrent: Bool = false
+    var isActivelyPlaying: Bool = false
+
+    init(track: Track, isCurrent: Bool = false, isActivelyPlaying: Bool = false) {
+        self.track = track
+        self.isCurrent = isCurrent
+        self.isActivelyPlaying = isActivelyPlaying
+    }
+
+    /// Compatibility for call sites not yet updated.
+    init(track: Track, isPlaying: Bool) {
+        self.track = track
+        self.isCurrent = isPlaying
+        self.isActivelyPlaying = isPlaying
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -278,12 +293,14 @@ struct TrackRow: View {
                     .frame(width: 52, height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                if isPlaying {
+                if isCurrent {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(.black.opacity(0.4))
                         .frame(width: 52, height: 52)
-                    NowPlayingBars()
-                        .frame(width: 16, height: 14)
+                    if isActivelyPlaying {
+                        NowPlayingBars()
+                            .frame(width: 16, height: 14)
+                    }
                 }
             }
 
@@ -292,7 +309,7 @@ struct TrackRow: View {
                     .font(.callout)
                     .fontWeight(.medium)
                     .lineLimit(1)
-                    .foregroundColor(isPlaying ? Color.accentColor : .primary)
+                    .foregroundColor(isCurrent ? Color.accentColor : .primary)
                 Text(track.artist)
                     .font(.caption)
                     .foregroundStyle(.secondary)
