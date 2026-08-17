@@ -191,6 +191,43 @@ final class LibraryStoreTests {
         }
     }
 
+    @Test func createPlaylist_duplicateNameGetsNumericSuffix() throws {
+        let store = LibraryStore()
+        store._testSetFolderURL(tempDir)
+
+        let first = try #require(store.createPlaylist(name: "Mix"))
+        let second = try #require(store.createPlaylist(name: "Mix"))
+
+        #expect(store.playlists.count == 2)
+        #expect(first.fileURL.lastPathComponent == "Mix.m3u")
+        #expect(second.fileURL.lastPathComponent == "Mix 2.m3u")
+        #expect(FileManager.default.fileExists(atPath: first.fileURL.path))
+        #expect(FileManager.default.fileExists(atPath: second.fileURL.path))
+        #expect(store.playlists.map(\.name) == ["Mix", "Mix 2"])
+    }
+
+    @Test func createPlaylist_pathCharactersStayInsideFolder() throws {
+        let store = LibraryStore()
+        store._testSetFolderURL(tempDir)
+
+        let nested = try #require(store.createPlaylist(name: "foo/bar"))
+        #expect(nested.fileURL.deletingLastPathComponent().standardized.path ==
+                tempDir.standardized.path)
+        #expect(!nested.fileURL.lastPathComponent.contains("/"))
+        #expect(nested.fileURL.lastPathComponent == "foo-bar.m3u")
+        #expect(!FileManager.default.fileExists(
+            atPath: tempDir.appendingPathComponent("foo")
+                .appendingPathComponent("bar.m3u").path
+        ))
+
+        let escaped = try #require(store.createPlaylist(name: "../outside"))
+        #expect(escaped.fileURL.deletingLastPathComponent().standardized.path ==
+                tempDir.standardized.path)
+        let parentLeak = tempDir.deletingLastPathComponent()
+            .appendingPathComponent("outside.m3u")
+        #expect(!FileManager.default.fileExists(atPath: parentLeak.path))
+    }
+
     @Test func deletePlaylists_removesFromArrayAndDisk() {
         let store = LibraryStore()
         store._testSetFolderURL(tempDir)
@@ -217,6 +254,28 @@ final class LibraryStoreTests {
         #expect(store.playlists.first(where: { $0.id == playlist.id })?.trackURLs.count == 1)
         let parsed = try #require(MetadataLoader.parsePlaylist(at: playlist.fileURL))
         #expect(parsed.rawPaths == ["song.mp3"])
+    }
+
+    // MARK: - Scan result handling
+
+    /// Empty-success: a listable folder with no audio clears the cached
+    /// library. Inaccessible (missing) folders keep it. See
+    /// `MetadataLoader.scanFolder` / `FolderScanResult`.
+    @Test func rescan_emptyFolderClearsCachedLibrary() async {
+        let store = LibraryStore()
+        await store._testSeedTracks([Fixtures.track(title: "Cached")])
+        store._testSetFolderURL(tempDir)
+        await store.rescan()
+        #expect(store.tracks.isEmpty)
+    }
+
+    @Test func rescan_inaccessibleFolderKeepsCachedLibrary() async {
+        let store = LibraryStore()
+        await store._testSeedTracks([Fixtures.track(title: "Cached")])
+        let missing = tempDir.appendingPathComponent("missing-folder", isDirectory: true)
+        store._testSetFolderURL(missing)
+        await store.rescan()
+        #expect(store.tracks.map(\.title) == ["Cached"])
     }
 
     // MARK: - Lookup helpers

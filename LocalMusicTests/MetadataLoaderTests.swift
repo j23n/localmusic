@@ -209,6 +209,26 @@ final class MetadataLoaderTests {
         #expect(playlist.trackURLs == [])
     }
 
+    // MARK: - scanFolder empty vs inaccessible
+
+    @Test func scanFolder_emptyDirectoryIsSuccessEmpty() async {
+        let result = await MetadataLoader.scanFolder(at: tempDir)
+        guard case .success(let tracks) = result.outcome else {
+            Issue.record("expected success([]) for an empty directory")
+            return
+        }
+        #expect(tracks.isEmpty)
+    }
+
+    @Test func scanFolder_missingDirectoryIsInaccessible() async {
+        let missing = tempDir.appendingPathComponent("does-not-exist", isDirectory: true)
+        let result = await MetadataLoader.scanFolder(at: missing)
+        guard case .inaccessible = result.outcome else {
+            Issue.record("expected inaccessible for a missing directory")
+            return
+        }
+    }
+
     // MARK: - parseSYLT
 
     @Test func parseSYLT_utf8_basicLines() throws {

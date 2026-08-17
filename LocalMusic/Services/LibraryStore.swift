@@ -61,6 +61,7 @@ final class LibraryStore {
     @ObservationIgnored private var tracksByURL: [URL: Track] = [:]
     @ObservationIgnored private var searchKeys: [String] = []
     @ObservationIgnored private var applyTask: Task<Void, Never>?
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var scanAccessURL: URL?
 
     private static let sortDefaultsKey = "librarySort"
@@ -120,7 +121,7 @@ final class LibraryStore {
 
         if let url = folderURL {
             startScanAccess(url)
-            playlists = MetadataLoader.scanPlaylists(in: url)
+            playlists = await MetadataLoader.scanPlaylists(in: url)
             Log.library.info("Loaded \(playlists.count) playlists from \(url.lastPathComponent)")
             await rescanIfNeeded()
         }
@@ -136,7 +137,7 @@ final class LibraryStore {
         if tracks.isEmpty {
             needsRescan = true
         } else if let last = lastSynced,
-                  let mtime = PersistenceManager.shared.folderContentModificationDate(at: folderURL) {
+                  let mtime = await PersistenceManager.shared.folderContentModificationDateAsync(at: folderURL) {
             needsRescan = mtime > last
         } else {
             needsRescan = true
@@ -145,7 +146,7 @@ final class LibraryStore {
         if needsRescan {
             await rescan()
         } else {
-            playlists = MetadataLoader.scanPlaylists(in: folderURL)
+            playlists = await MetadataLoader.scanPlaylists(in: folderURL)
         }
     }
 
@@ -157,43 +158,40 @@ final class LibraryStore {
         await rescanIfNeeded()
     }
 
-    /// Forces a full rescan regardless of mtime. No-op if a scan is already
-    /// running so concurrent triggers (Reload + pull-to-refresh) don't race.
+    /// Forces a full rescan regardless of mtime. Cancels any in-flight scan
+    /// and starts a new one so folder switches and overlapping triggers
+    /// (Reload + pull-to-refresh) don't race.
     func rescan() async {
-        guard let folderURL else {
+        guard folderURL != nil else {
             Log.library.warning("Rescan requested but no folder selected")
             return
         }
-        guard !isScanning else {
-            Log.library.debug("Rescan requested while scan already running — ignoring")
+
+        await cancelInFlightScan()
+
+        guard let folderURL else {
+            isScanning = false
+            scanProgress = nil
             return
         }
+
         startScanAccess(folderURL)
         isScanning = true
         scanProgress = nil
-        Log.library.info("Rescan starting: \(folderURL.lastPathComponent)")
+        let capturedURL = folderURL
+        Log.library.info("Rescan starting: \(capturedURL.lastPathComponent)")
 
-        let scanned = await MetadataLoader.scanFolder(at: folderURL) { [weak self] progress in
-            Task { @MainActor [weak self] in
-                self?.scanProgress = progress
-            }
+        let task = Task { [weak self] in
+            await self?.performScan(capturedURL: capturedURL)
         }
+        scanTask = task
+        await task.value
 
-        if !scanned.isEmpty {
-            Log.library.info("Rescan complete: \(scanned.count) tracks")
-            await ingest(tracks: scanned, persist: true)
-            let now = Date()
-            PersistenceManager.shared.saveLastSynced(now)
-            lastSynced = now
-        } else {
-            Log.library.warning("Rescan returned 0 tracks — keeping cached library")
+        if scanTask == task {
+            isScanning = false
+            scanProgress = nil
+            scanTask = nil
         }
-        // If `scanned` is empty (likely a transient access failure) we
-        // intentionally keep the cached library rather than blowing it away.
-
-        playlists = MetadataLoader.scanPlaylists(in: folderURL)
-        isScanning = false
-        scanProgress = nil
     }
 
     /// Picks up a freshly-saved folder bookmark (after the picker has done
@@ -205,9 +203,53 @@ final class LibraryStore {
             return
         }
         Log.library.info("Adopted folder: \(resolved.lastPathComponent)")
+        // Finish (or abandon) the previous folder's walk before dropping
+        // its security-scoped access and pointing at the new URL.
+        await cancelInFlightScan()
         folderURL = resolved
         startScanAccess(resolved)
         await rescan()
+    }
+
+    /// Cancels the current scan and waits for it to unwind so we never
+    /// `stopAccessingSecurityScopedResource` on a folder while a walk of
+    /// that folder is still running.
+    private func cancelInFlightScan() async {
+        scanTask?.cancel()
+        await scanTask?.value
+        scanTask = nil
+    }
+
+    private func performScan(capturedURL: URL) async {
+        let result = await MetadataLoader.scanFolder(at: capturedURL) { [weak self] progress in
+            Task { @MainActor [weak self] in
+                self?.scanProgress = progress
+            }
+        }
+
+        if Task.isCancelled || folderURL != capturedURL {
+            Log.library.debug("Discarding stale/cancelled scan for \(capturedURL.lastPathComponent)")
+            return
+        }
+
+        switch result.outcome {
+        case .success(let tracks):
+            // Empty is valid: the user switched to a folder with no audio.
+            Log.library.info("Rescan complete: \(tracks.count) tracks")
+            await ingest(tracks: tracks, persist: true)
+            let now = Date()
+            PersistenceManager.shared.saveLastSynced(now)
+            lastSynced = now
+        case .inaccessible:
+            // Transient access failure — keep the cached library.
+            Log.library.warning("Rescan could not access folder — keeping cached library")
+            return
+        }
+
+        if Task.isCancelled || folderURL != capturedURL { return }
+        let found = await MetadataLoader.scanPlaylists(in: capturedURL)
+        if Task.isCancelled || folderURL != capturedURL { return }
+        playlists = found
     }
 
     /// Independent security-scoped access for scanning. The audio player
@@ -226,7 +268,9 @@ final class LibraryStore {
 
     func refreshPlaylistsFromDisk() {
         guard let folderURL else { return }
-        playlists = MetadataLoader.scanPlaylists(in: folderURL)
+        Task {
+            playlists = await MetadataLoader.scanPlaylists(in: folderURL)
+        }
     }
 
     func savePlaylist(_ playlist: Playlist) {
@@ -260,7 +304,7 @@ final class LibraryStore {
             return nil
         }
         let playlist = MetadataLoader.createPlaylist(name: trimmed, in: folderURL)
-        Log.library.info("Created playlist: \(trimmed)")
+        Log.library.info("Created playlist: \(playlist.name)")
         playlists.append(playlist)
         playlists.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         return playlist
@@ -338,11 +382,11 @@ final class LibraryStore {
     /// Filters, sorts, and pre-computes sections in a single detached task so
     /// large libraries don't block the main thread.
     ///
-    /// `Task.checkCancellation` is consulted between each phase, and the
-    /// outer `withTaskCancellationHandler` forwards the parent task's
-    /// cancellation into the detached worker — without it, cancelling
-    /// `applyTask` would only abandon the await and leave the worker
-    /// running to completion.
+    /// `Task.checkCancellation` is consulted between each phase and every
+    /// 1024 sort comparisons. The outer `withTaskCancellationHandler`
+    /// forwards the parent task's cancellation into the detached worker —
+    /// without it, cancelling `applyTask` would only abandon the await and
+    /// leave the worker running to completion.
     private static func filterSortSection(tracks: [Track],
                                           keys: [String],
                                           query: String,
@@ -361,7 +405,12 @@ final class LibraryStore {
                 }
             }
             try Task.checkCancellation()
-            indices.sort { l, r in
+            var comparisons = 0
+            try indices.sort { l, r in
+                comparisons += 1
+                if comparisons % 1024 == 0 {
+                    try Task.checkCancellation()
+                }
                 let a = tracks[l]
                 let b = tracks[r]
                 switch sort {

@@ -232,16 +232,16 @@ final class PersistenceManagerTests {
 
     // MARK: - folderContentModificationDate
 
-    @Test func folderModification_emptyFolderReturnsRootMtime() throws {
+    @Test func folderModification_emptyFolderReturnsRootMtime() async throws {
         let folder = tempDir.appendingPathComponent("empty", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let pm = PersistenceManager(documentsURL: tempDir, userDefaults: defaults)
-        let mtime = pm.folderContentModificationDate(at: folder)
+        let mtime = await pm.folderContentModificationDateAsync(at: folder)
         #expect(mtime != nil)
     }
 
-    @Test func folderModification_picksLatestNestedMtime() throws {
+    @Test func folderModification_picksLatestNestedMtime() async throws {
         let folder = tempDir.appendingPathComponent("nested", isDirectory: true)
         let nested = folder.appendingPathComponent("inner", isDirectory: true)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
@@ -259,14 +259,38 @@ final class PersistenceManagerTests {
                                               ofItemAtPath: newFile.path)
 
         let pm = PersistenceManager(documentsURL: tempDir, userDefaults: defaults)
-        let mtime = try #require(pm.folderContentModificationDate(at: folder))
+        let mtime = try #require(await pm.folderContentModificationDateAsync(at: folder))
         #expect(abs(mtime.timeIntervalSince1970 - newDate.timeIntervalSince1970) < 1.5)
     }
 
-    @Test func folderModification_nonExistentReturnsNil() {
+    @Test func folderModification_playlistFileDoesNotBumpMtime() async throws {
+        let folder = tempDir.appendingPathComponent("plskip", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let audio = folder.appendingPathComponent("song.mp3")
+        let playlist = folder.appendingPathComponent("mix.m3u")
+        FileManager.default.createFile(atPath: audio.path, contents: Data())
+        FileManager.default.createFile(atPath: playlist.path, contents: Data("#EXTM3U\n".utf8))
+
+        let audioDate = Date(timeIntervalSince1970: 1_600_000_000)
+        let playlistDate = Date(timeIntervalSince1970: 1_800_000_000)
+        try FileManager.default.setAttributes([.modificationDate: audioDate],
+                                              ofItemAtPath: audio.path)
+        try FileManager.default.setAttributes([.modificationDate: playlistDate],
+                                              ofItemAtPath: playlist.path)
+        // A naive walk that includes directory mtimes would pick this up.
+        try FileManager.default.setAttributes([.modificationDate: playlistDate],
+                                              ofItemAtPath: folder.path)
+
+        let pm = PersistenceManager(documentsURL: tempDir, userDefaults: defaults)
+        let mtime = try #require(await pm.folderContentModificationDateAsync(at: folder))
+        #expect(abs(mtime.timeIntervalSince1970 - audioDate.timeIntervalSince1970) < 1.5)
+    }
+
+    @Test func folderModification_nonExistentReturnsNil() async {
         let missing = tempDir.appendingPathComponent("does-not-exist")
         let pm = PersistenceManager(documentsURL: tempDir, userDefaults: defaults)
-        #expect(pm.folderContentModificationDate(at: missing) == nil)
+        #expect(await pm.folderContentModificationDateAsync(at: missing) == nil)
     }
 
     // MARK: - Helpers

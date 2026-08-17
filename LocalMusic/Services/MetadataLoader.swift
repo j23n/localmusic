@@ -7,6 +7,17 @@ struct ScanProgress: Sendable, Equatable {
     var total: Int
 }
 
+/// Distinguishes a successful scan that found nothing from a failed
+/// root listing. An empty folder is a real result (the library should
+/// clear); an inaccessible folder should keep the cached library.
+struct FolderScanResult: Sendable {
+    enum Outcome: Sendable {
+        case success([Track])
+        case inaccessible
+    }
+    var outcome: Outcome
+}
+
 struct MetadataLoader {
 
     static let supportedExtensions: Set<String> = [
@@ -24,16 +35,34 @@ struct MetadataLoader {
     // MARK: - Folder Scanning
 
     /// Caller must ensure security-scoped access is already active on `url`.
-    /// Reports progress periodically via `onProgress`. Tracks are returned
-    /// sorted by title for legacy callers; `LibraryStore` re-sorts as needed.
+    /// Reports progress periodically via `onProgress`. Collection runs off
+    /// the caller's actor so a large tree walk does not hitch the main thread.
     static func scanFolder(at url: URL,
-                           onProgress: (@Sendable (ScanProgress) -> Void)? = nil) async -> [Track] {
-        let audioURLs = collectAudioFiles(in: url)
+                           onProgress: (@Sendable (ScanProgress) -> Void)? = nil) async -> FolderScanResult {
+        // Detached so `collectAudioFiles` is not the first synchronous work
+        // on whoever called us (typically `@MainActor` LibraryStore).
+        let collectTask = Task.detached(priority: .userInitiated) {
+            collectAudioFiles(in: url)
+        }
+        let listing = await withTaskCancellationHandler {
+            await collectTask.value
+        } onCancel: {
+            collectTask.cancel()
+        }
+
+        guard let audioURLs = listing else {
+            Log.scan.warning("Scan folder: \(url.lastPathComponent) — root listing failed")
+            return FolderScanResult(outcome: .inaccessible)
+        }
+        if Task.isCancelled {
+            return FolderScanResult(outcome: .success([]))
+        }
+
         let total = audioURLs.count
         Log.scan.info("Scan folder: \(url.lastPathComponent) — found \(total) audio files")
         guard total > 0 else {
             onProgress?(ScanProgress(completed: 0, total: 0))
-            return []
+            return FolderScanResult(outcome: .success([]))
         }
 
         var tracks: [Track] = []
@@ -51,6 +80,10 @@ struct MetadataLoader {
             }
             var completed = 0
             for await track in group {
+                if Task.isCancelled {
+                    group.cancelAll()
+                    break
+                }
                 tracks.append(track)
                 completed += 1
                 if completed % 25 == 0 || completed == total {
@@ -62,36 +95,56 @@ struct MetadataLoader {
             }
         }
 
-        return tracks
+        return FolderScanResult(outcome: .success(tracks))
     }
 
-    /// Recursively collect audio files using `contentsOfDirectory(at:)`.
-    /// This preserves the parent URL's path prefix (critical for security-scoped access),
-    /// unlike `FileManager.enumerator` which resolves symlinks and can produce
-    /// `/private/var/...` paths that fall outside the security scope.
-    private static func collectAudioFiles(in directory: URL) -> [URL] {
+    /// Iterative walk via `contentsOfDirectory(at:)`. Returns `nil` when the
+    /// *root* listing fails; nested directories that cannot be listed are
+    /// skipped. An explicit stack avoids overflowing on deep trees.
+    ///
+    /// `contentsOfDirectory` preserves the parent URL's path prefix (critical
+    /// for security-scoped access), unlike `FileManager.enumerator` which
+    /// resolves symlinks and can produce `/private/var/...` paths that fall
+    /// outside the security scope.
+    private static func collectAudioFiles(in directory: URL) -> [URL]? {
         let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
+        guard let rootContents = try? fm.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return nil
         }
 
         var results: [URL] = []
+        var stack: [URL] = []
+        consumeListing(rootContents, files: &results, stack: &stack, matching: supportedExtensions)
+        while let current = stack.popLast() {
+            if Task.isCancelled { break }
+            guard let contents = try? fm.contentsOfDirectory(
+                at: current,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+            consumeListing(contents, files: &results, stack: &stack, matching: supportedExtensions)
+        }
+        return results
+    }
+
+    private static func consumeListing(_ contents: [URL],
+                                       files: inout [URL],
+                                       stack: inout [URL],
+                                       matching extensions: Set<String>) {
         for item in contents {
             let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isDir {
-                results.append(contentsOf: collectAudioFiles(in: item))
-            } else {
-                let ext = item.pathExtension.lowercased()
-                if supportedExtensions.contains(ext) {
-                    results.append(item)
-                }
+                stack.append(item)
+            } else if extensions.contains(item.pathExtension.lowercased()) {
+                files.append(item)
             }
         }
-        return results
     }
 
     // MARK: - Single Track Metadata
@@ -317,31 +370,40 @@ struct MetadataLoader {
 
     // MARK: - Playlist Discovery
 
-    static func scanPlaylists(in directory: URL) -> [Playlist] {
-        let files = collectPlaylistFiles(in: directory)
-        return files.compactMap { parsePlaylist(at: $0) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    static func scanPlaylists(in directory: URL) async -> [Playlist] {
+        let walk = Task.detached(priority: .userInitiated) { () -> [Playlist] in
+            let files = collectPlaylistFiles(in: directory)
+            return files.compactMap { parsePlaylist(at: $0) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+        return await withTaskCancellationHandler {
+            await walk.value
+        } onCancel: {
+            walk.cancel()
+        }
     }
 
+    /// Iterative walk; nested listing failures are skipped. Same
+    /// `contentsOfDirectory` rationale as `collectAudioFiles`.
     private static func collectPlaylistFiles(in directory: URL) -> [URL] {
         let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
+        guard let rootContents = try? fm.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
         var results: [URL] = []
-        for item in contents {
-            let isDir = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir {
-                results.append(contentsOf: collectPlaylistFiles(in: item))
-            } else {
-                let ext = item.pathExtension.lowercased()
-                if playlistExtensions.contains(ext) {
-                    results.append(item)
-                }
-            }
+        var stack: [URL] = []
+        consumeListing(rootContents, files: &results, stack: &stack, matching: playlistExtensions)
+        while let current = stack.popLast() {
+            if Task.isCancelled { break }
+            guard let contents = try? fm.contentsOfDirectory(
+                at: current,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            consumeListing(contents, files: &results, stack: &stack, matching: playlistExtensions)
         }
         return results
     }
@@ -443,8 +505,10 @@ struct MetadataLoader {
     }
 
     static func createPlaylist(name: String, in directory: URL) -> Playlist {
-        let fileURL = directory.appendingPathComponent("\(name).m3u")
-        let playlist = Playlist(fileURL: fileURL, name: name, trackURLs: [], rawPaths: [])
+        let baseName = sanitizedPlaylistBaseName(name)
+        let fileURL = uniquePlaylistFileURL(baseName: baseName, in: directory)
+        let displayName = fileURL.deletingPathExtension().lastPathComponent
+        let playlist = Playlist(fileURL: fileURL, name: displayName, trackURLs: [], rawPaths: [])
         let content = "#EXTM3U\n"
         do {
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -452,6 +516,30 @@ struct MetadataLoader {
             Log.persistence.error("Failed to create playlist \(fileURL.lastPathComponent): \(error.localizedDescription)")
         }
         return playlist
+    }
+
+    /// Replaces `/` and `:` and strips `..` so `appendingPathComponent`
+    /// cannot nest or escape `directory`.
+    static func sanitizedPlaylistBaseName(_ name: String) -> String {
+        var result = name
+        result = result.replacingOccurrences(of: "/", with: "-")
+        result = result.replacingOccurrences(of: ":", with: "-")
+        while result.contains("..") {
+            result = result.replacingOccurrences(of: "..", with: "")
+        }
+        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.isEmpty ? "Playlist" : result
+    }
+
+    private static func uniquePlaylistFileURL(baseName: String, in directory: URL) -> URL {
+        let fm = FileManager.default
+        var candidate = directory.appendingPathComponent("\(baseName).m3u")
+        var n = 2
+        while fm.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent("\(baseName) \(n).m3u")
+            n += 1
+        }
+        return candidate
     }
 
     static func relativePath(for trackURL: URL, relativeTo baseDir: URL) -> String {

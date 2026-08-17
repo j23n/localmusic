@@ -185,31 +185,61 @@ final class PersistenceManager: @unchecked Sendable {
     /// which fall outside the security-scoped grant and silently fail to
     /// produce resource values — making the returned date stale and
     /// suppressing legitimate rescans.
+    ///
+    /// Playlist files (`.m3u` / `.m3u8` / `.pls`) are ignored so creating
+    /// or editing a playlist does not bump this date and trigger a full
+    /// audio rescan. Directory mtimes are also ignored when any countable
+    /// file exists — otherwise a new playlist would still trip the gate
+    /// via the parent folder's own mtime. Empty (or playlist-only) folders
+    /// fall back to the root folder's mtime.
     func folderContentModificationDate(at url: URL) -> Date? {
-        let rootDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            .contentModificationDate) ?? .distantPast
-        let latest = max(rootDate, latestMTime(under: url))
-        return latest == .distantPast ? nil : latest
+        let fileLatest = latestMTime(under: url)
+        if fileLatest != .distantPast {
+            return fileLatest
+        }
+        return try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
     }
 
-    private func latestMTime(under directory: URL) -> Date {
-        guard let contents = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return .distantPast
-        }
-
-        var latest: Date = .distantPast
-        for item in contents {
-            let values = try? item.resourceValues(forKeys: [.contentModificationDateKey, .isDirectoryKey])
-            if let date = values?.contentModificationDate, date > latest {
-                latest = date
+    /// Off-main wrapper so `@MainActor` callers don't hitch on a large tree.
+    func folderContentModificationDateAsync(at url: URL) async -> Date? {
+        await withCheckedContinuation { cont in
+            ioQueue.async {
+                cont.resume(returning: self.folderContentModificationDate(at: url))
             }
-            if values?.isDirectory == true {
-                let nested = latestMTime(under: item)
-                if nested > latest { latest = nested }
+        }
+    }
+
+    /// Iterative walk. Nested listing failures are skipped. Playlist
+    /// extensions are excluded; directories are still descended.
+    private func latestMTime(under directory: URL) -> Date {
+        var latest: Date = .distantPast
+        var stack: [URL] = [directory]
+
+        while let current = stack.popLast() {
+            guard let contents = try? fileManager.contentsOfDirectory(
+                at: current,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+
+            for item in contents {
+                let values = try? item.resourceValues(forKeys: [
+                    .contentModificationDateKey, .isDirectoryKey
+                ])
+                if values?.isDirectory == true {
+                    stack.append(item)
+                    continue
+                }
+                let ext = item.pathExtension.lowercased()
+                if MetadataLoader.playlistExtensions.contains(ext) {
+                    continue
+                }
+                if let date = values?.contentModificationDate, date > latest {
+                    latest = date
+                }
             }
         }
         return latest
