@@ -15,6 +15,8 @@ final class LogPersistence {
     static let debounceSeconds: UInt64 = 2
 
     private var pendingFlush: Task<Void, Never>?
+    private var lastFlushedCount = 0
+    private var lastFlushedID: UUID?
 
     private init() {}
 
@@ -32,6 +34,15 @@ final class LogPersistence {
 
     func flushNow() {
         guard isEnabled else { return }
+        let entries = LogStore.shared.entries
+        let lastID = entries.last?.id
+        // Debounce already coalesces bursts; skip the 5k-line format +
+        // disk write when the ring buffer hasn't changed since last flush.
+        if entries.count == lastFlushedCount, lastID == lastFlushedID {
+            return
+        }
+        lastFlushedCount = entries.count
+        lastFlushedID = lastID
         let url = CrashDiagnosticsService.shared.logTailURL
         Self.flush(text: LogStore.shared.asText, to: url)
     }

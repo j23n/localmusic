@@ -3,12 +3,14 @@ import SwiftUI
 // MARK: - Playlist Item (resolved track or missing file)
 
 private enum PlaylistItem: Identifiable {
-    case resolved(index: Int, track: Track)
+    /// `queueIndex` is this item's offset among resolved tracks (missing
+    /// rows skipped) — the play-queue `startIndex`, not `firstIndex` by id.
+    case resolved(index: Int, track: Track, queueIndex: Int)
     case missing(index: Int, rawPath: String)
 
     var id: String {
         switch self {
-        case .resolved(let index, _): return "r-\(index)"
+        case .resolved(let index, _, _): return "r-\(index)"
         case .missing(let index, _):  return "m-\(index)"
         }
     }
@@ -17,7 +19,10 @@ private enum PlaylistItem: Identifiable {
 struct PlaylistDetailView: View {
     @Binding var playlist: Playlist
     @Environment(LibraryStore.self) private var library
-    @Environment(AudioPlayerManager.self) private var player
+    // Intentionally does NOT observe `AudioPlayerManager`: that would force
+    // a body re-render on every 0.5 s playback tick. Per-row playback state
+    // is read inside `PlaylistTrackRowButton`; Play All lives in its own
+    // inner view so this list is not subscribed to the player.
     @State private var showAddTracks = false
 
     /// Resolves URLs to tracks via the store's O(1) lookup. Memoizing this
@@ -52,6 +57,12 @@ struct PlaylistDetailView: View {
         .onAppear { rebuildCaches() }
         .onChange(of: playlist.trackURLs) { _, _ in rebuildCaches() }
         .onChange(of: library.tracks.count) { _, _ in rebuildCaches() }
+        // Track == is id-only, so a rescan that replaces files in place
+        // (same count, same ids) does not fire `onChange(of: library.tracks)`.
+        // Rebuild when the scan finishes so retags / replacements resolve.
+        .onChange(of: library.isScanning) { _, scanning in
+            if !scanning { rebuildCaches() }
+        }
     }
 
     // MARK: - Subviews
@@ -90,40 +101,19 @@ struct PlaylistDetailView: View {
         List {
             if !resolved.isEmpty {
                 Section {
-                    Button {
-                        if let first = resolved.first {
-                            player.play(track: first, queue: resolved, startIndex: 0)
-                        }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            Label("Play All", systemImage: "play.fill")
-                                .font(.callout)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                            Spacer()
-                        }
-                        .padding(.vertical, 10)
-                        .background(Color.accentColor, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
+                    PlaylistPlayAllButton(resolved: resolved)
                 }
             }
 
             Section {
                 ForEach(items) { item in
                     switch item {
-                    case .resolved(_, let track):
-                        Button {
-                            if let playIdx = resolved.firstIndex(where: { $0.id == track.id }) {
-                                player.play(track: track, queue: resolved, startIndex: playIdx)
-                            }
-                        } label: {
-                            TrackRow(track: track,
-                                     isPlaying: player.currentTrack?.id == track.id)
-                        }
+                    case .resolved(_, let track, let queueIndex):
+                        PlaylistTrackRowButton(
+                            track: track,
+                            resolvedQueue: resolved,
+                            startIndex: queueIndex
+                        )
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     case .missing(_, let rawPath):
@@ -176,7 +166,9 @@ struct PlaylistDetailView: View {
         items.reserveCapacity(playlist.trackURLs.count)
         for (index, url) in playlist.trackURLs.enumerated() {
             if let track = library.track(forURL: url) {
-                items.append(.resolved(index: index, track: track))
+                // startIndex among resolved rows, so a second copy of the
+                // same file (shared Track.id) still plays the tapped row.
+                items.append(.resolved(index: index, track: track, queueIndex: resolved.count))
                 resolved.append(track)
             } else {
                 let raw = index < playlist.rawPaths.count ? playlist.rawPaths[index] : url.path
@@ -185,6 +177,64 @@ struct PlaylistDetailView: View {
         }
         self.cachedItems = items
         self.cachedResolvedTracks = resolved
+    }
+}
+
+// MARK: - Play All (isolated player access)
+
+private struct PlaylistPlayAllButton: View {
+    let resolved: [Track]
+    @Environment(AudioPlayerManager.self) private var player
+
+    var body: some View {
+        Button {
+            if let first = resolved.first {
+                player.play(track: first, queue: resolved, startIndex: 0)
+            }
+        } label: {
+            HStack {
+                Spacer()
+                Label("Play All", systemImage: "play.fill")
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .background(Color.accentColor, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
+    }
+}
+
+// MARK: - Playlist Track Row
+
+/// Wraps a `TrackRow` with the play action. Pulled out so SwiftUI doesn't
+/// re-evaluate the entire `PlaylistDetailView` body each time the player
+/// ticks. `startIndex` is the offset in `resolvedQueue`, not `firstIndex`
+/// by `Track.id` — duplicate files in the playlist play the tapped copy.
+private struct PlaylistTrackRowButton: View {
+    let track: Track
+    let resolvedQueue: [Track]
+    let startIndex: Int
+    @Environment(AudioPlayerManager.self) private var player
+
+    var body: some View {
+        Button {
+            player.play(track: track, queue: resolvedQueue, startIndex: startIndex)
+        } label: {
+            // TrackRow still uses `isPlaying` on this branch. At merge time,
+            // switch to `isCurrent` / `isActivelyPlaying` if the artwork
+            // agent landed that API:
+            //   TrackRow(track: track,
+            //            isCurrent: player.currentTrack?.id == track.id,
+            //            isActivelyPlaying: player.isPlaying
+            //                && player.currentTrack?.id == track.id)
+            TrackRow(track: track,
+                     isPlaying: player.currentTrack?.id == track.id)
+        }
     }
 }
 
@@ -289,11 +339,9 @@ struct AddTracksSheet: View {
     }
 
     private var filteredLibrary: [Track] {
-        // Ceiling on rendered rows so the sheet stays responsive even for
-        // 10k-track libraries when the user hasn't typed anything yet. The
-        // store's pre-lowercased index does the actual matching.
-        library.searchTracks(query: debouncedQuery,
-                             limit: debouncedQuery.isEmpty ? 500 : nil)
+        // `List` is lazy; no empty-query ceiling. The store's pre-lowercased
+        // index does the actual matching.
+        library.searchTracks(query: debouncedQuery)
     }
 
     private func toggle(_ track: Track) {

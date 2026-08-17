@@ -5,11 +5,25 @@ final class LogStore: @unchecked Sendable {
     static let shared = LogStore()
 
     struct Entry: Identifiable {
-        let id: UUID = UUID()
+        let id: UUID
         let timestamp: Date
         let level: Level
         let category: String
         let message: String
+        /// Pre-lowercased at insert so LogsView can filter without
+        /// allocating on every render.
+        let messageLowercased: String
+        let categoryLowercased: String
+
+        init(timestamp: Date, level: Level, category: String, message: String) {
+            self.id = UUID()
+            self.timestamp = timestamp
+            self.level = level
+            self.category = category
+            self.message = message
+            self.messageLowercased = message.lowercased()
+            self.categoryLowercased = category.lowercased()
+        }
 
         enum Level: String, CaseIterable {
             case debug, info, warning, error
@@ -20,6 +34,14 @@ final class LogStore: @unchecked Sendable {
 
     private(set) var entries: [Entry] = []
     private let maxEntries = 5000
+
+    /// Shared by `asText`. Callers (`LogPersistence.flushNow`, LogsView)
+    /// run on the main actor; DateFormatter is not thread-safe.
+    private static let asTextFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        return formatter
+    }()
 
     private init() {}
 
@@ -54,8 +76,7 @@ final class LogStore: @unchecked Sendable {
     }
 
     var asText: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        let formatter = Self.asTextFormatter
         return entries.map { entry in
             "[\(formatter.string(from: entry.timestamp))] [\(entry.level.displayName)] [\(entry.category)] \(entry.message)"
         }.joined(separator: "\n")

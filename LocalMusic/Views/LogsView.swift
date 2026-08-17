@@ -15,12 +15,12 @@ struct LogsView: View {
     }()
 
     private var filteredEntries: [LogStore.Entry] {
-        logStore.entries.filter { entry in
+        let needle = searchText.lowercased()
+        return logStore.entries.filter { entry in
             if let level = filterLevel, entry.level != level { return false }
-            if !searchText.isEmpty {
-                let needle = searchText.lowercased()
-                return entry.message.lowercased().contains(needle)
-                    || entry.category.lowercased().contains(needle)
+            if !needle.isEmpty {
+                return entry.messageLowercased.contains(needle)
+                    || entry.categoryLowercased.contains(needle)
             }
             return true
         }
