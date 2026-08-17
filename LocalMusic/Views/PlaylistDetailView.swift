@@ -225,15 +225,10 @@ private struct PlaylistTrackRowButton: View {
         Button {
             player.play(track: track, queue: resolvedQueue, startIndex: startIndex)
         } label: {
-            // TrackRow still uses `isPlaying` on this branch. At merge time,
-            // switch to `isCurrent` / `isActivelyPlaying` if the artwork
-            // agent landed that API:
-            //   TrackRow(track: track,
-            //            isCurrent: player.currentTrack?.id == track.id,
-            //            isActivelyPlaying: player.isPlaying
-            //                && player.currentTrack?.id == track.id)
             TrackRow(track: track,
-                     isPlaying: player.currentTrack?.id == track.id)
+                     isCurrent: player.currentTrack?.id == track.id,
+                     isActivelyPlaying: player.isPlaying
+                         && player.currentTrack?.id == track.id)
         }
     }
 }
