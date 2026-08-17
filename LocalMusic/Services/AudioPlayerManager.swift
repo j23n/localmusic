@@ -45,8 +45,8 @@ final class AudioPlayerManager {
     @ObservationIgnored nonisolated(unsafe) private var timeObserver: Any?
     @ObservationIgnored nonisolated(unsafe) private var endObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var statusObserver: NSKeyValueObservation?
-    @ObservationIgnored nonisolated(unsafe) private var interruptionObserver: NSObjectProtocol?
-    @ObservationIgnored nonisolated(unsafe) private var routeChangeObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var interruptionTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var routeChangeTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var activeSecurityScopedURL: URL?
 
     /// Remembered across an audio-session interruption so we can resume
@@ -87,12 +87,8 @@ final class AudioPlayerManager {
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
         }
-        if let interruptionObserver {
-            NotificationCenter.default.removeObserver(interruptionObserver)
-        }
-        if let routeChangeObserver {
-            NotificationCenter.default.removeObserver(routeChangeObserver)
-        }
+        interruptionTask?.cancel()
+        routeChangeTask?.cancel()
         statusObserver?.invalidate()
         activeSecurityScopedURL?.stopAccessingSecurityScopedResource()
     }
@@ -115,35 +111,48 @@ final class AudioPlayerManager {
         }
     }
 
+    /// Apple's interruption and route-change articles observe via
+    /// `NotificationCenter.notifications(named:)`. That API's docs state
+    /// `Notification` is not `Sendable` (`object` / `userInfo` may not be),
+    /// and that crossing an actor boundary requires `compactMap`/`map` to
+    /// extract sendable `userInfo` values first.
     private func observeAudioSessionEvents() {
-        interruptionObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor in self?.handleInterruption(notification) }
+        interruptionTask = Task { [weak self] in
+            let events = NotificationCenter.default.notifications(
+                named: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance()
+            ).compactMap { notification -> (UInt, UInt)? in
+                guard let userInfo = notification.userInfo,
+                      let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt
+                else { return nil }
+                let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+                return (typeValue, optionsValue)
+            }
+            for await (typeValue, optionsValue) in events {
+                self?.handleInterruption(typeValue: typeValue, optionsValue: optionsValue)
+            }
         }
 
-        routeChangeObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: AVAudioSession.sharedInstance(),
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor in self?.handleRouteChange(notification) }
+        routeChangeTask = Task { [weak self] in
+            let events = NotificationCenter.default.notifications(
+                named: AVAudioSession.routeChangeNotification
+            ).compactMap { notification -> UInt? in
+                notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            }
+            for await reasonValue in events {
+                self?.handleRouteChange(reasonValue: reasonValue)
+            }
         }
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: typeValue)
-        else { return }
+    private func handleInterruption(typeValue: UInt, optionsValue: UInt) {
+        guard let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
 
         switch type {
         case .began:
             wasPlaying = isPlaying
             pause()
         case .ended:
-            let optionsValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
             if options.contains(.shouldResume) && wasPlaying {
                 play()
@@ -153,11 +162,8 @@ final class AudioPlayerManager {
         }
     }
 
-    private func handleRouteChange(_ notification: Notification) {
-        guard let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
-              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue)
-        else { return }
-
+    private func handleRouteChange(reasonValue: UInt) {
+        guard let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
         if reason == .oldDeviceUnavailable {
             pause()
         }

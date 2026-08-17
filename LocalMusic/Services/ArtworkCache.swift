@@ -31,7 +31,7 @@ enum ArtworkCache {
 
     /// Guards the side maps. `NSCache` itself is thread-safe; these
     /// dictionaries are not.
-    nonisolated(unsafe) private static let memoryLock = NSLock()
+    private static let memoryLock = NSLock()
 
     /// Serial writes / deletes so store and remove don't race on disk.
     private static let writeQueue = DispatchQueue(label: "com.localmusic.artworkCache",
@@ -40,7 +40,7 @@ enum ArtworkCache {
     /// Concurrent ImageIO decode with a small cap so fast scrolling doesn't
     /// serialize every row, and a cancelled `.task(id:)` can abandon work
     /// without blocking later rows.
-    nonisolated(unsafe) private static let decodeQueue: OperationQueue = {
+    private static let decodeQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.name = "com.localmusic.artworkCache.decode"
         queue.maxConcurrentOperationCount = 4

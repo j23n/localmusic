@@ -181,8 +181,9 @@ final class LibraryStore {
         let capturedURL = folderURL
         Log.library.info("Rescan starting: \(capturedURL.lastPathComponent)")
 
-        let task = Task { [weak self] in
-            await self?.performScan(capturedURL: capturedURL)
+        let task = Task<Void, Never> { [weak self] in
+            guard let self else { return }
+            await self.performScan(capturedURL: capturedURL)
         }
         scanTask = task
         await task.value

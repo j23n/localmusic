@@ -411,9 +411,7 @@ enum ArtworkColorCache {
 extension UIImage {
     /// Reused across dominant-color extractions. Creating a `CIContext` is
     /// the expensive part; the 1×1 CIAreaAverage render is cheap by comparison.
-    /// `nonisolated(unsafe)` because `CIContext` is thread-safe for renders
-    /// but not `Sendable`-marked.
-    nonisolated(unsafe) private static let dominantColorContext: CIContext = {
+    private static let dominantColorContext: CIContext = {
         CIContext(options: [.workingColorSpace: kCFNull as Any])
     }()
 

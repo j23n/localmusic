@@ -150,7 +150,7 @@ struct MetadataLoader {
     // MARK: - Single Track Metadata
 
     static func loadTrack(from url: URL) async -> Track {
-        let asset = AVAsset(url: url)
+        let asset = AVURLAsset(url: url)
         let fallbackTitle = url.deletingPathExtension().lastPathComponent
 
         var title = fallbackTitle
