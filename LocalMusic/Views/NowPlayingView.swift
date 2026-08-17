@@ -8,6 +8,8 @@ struct NowPlayingView: View {
     @State private var lyricsTrackID: UUID?
     @State private var artworkColor: UIColor = .systemGray
     @State private var artworkColorTrackID: UUID?
+    @State private var isSeeking = false
+    @State private var seekTarget = 0.0
 
     var body: some View {
         NavigationStack {
@@ -41,15 +43,21 @@ struct NowPlayingView: View {
         }
     }
 
+    private var displayedTime: Double {
+        isSeeking ? seekTarget : player.currentTime
+    }
+
     private func nowPlayingContent(track: Track) -> some View {
-        let artworkSize = UIScreen.main.bounds.width - 48
         let color = Color(artworkColor)
         // Only show the flip affordance once the lyrics payload is loaded
         // and confirmed non-empty, so we don't promise content the disk
         // load might fail to deliver.
         let hasLoadedLyrics = lyrics?.isEmpty == false
 
-        return ZStack {
+        return GeometryReader { geo in
+            let artworkSize = min(max(geo.size.width - 48, 0), geo.size.height * 0.45)
+
+            ZStack {
             // Ambient background
             Rectangle()
                 .fill(
@@ -71,7 +79,7 @@ struct NowPlayingView: View {
 
                 // Artwork / Lyrics flip
                 ZStack {
-                    artworkView(track: track)
+                    artworkView(track: track, size: artworkSize)
                         .frame(width: artworkSize, height: artworkSize)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .overlay(
@@ -136,20 +144,29 @@ struct NowPlayingView: View {
                 VStack(spacing: 4) {
                     Slider(
                         value: Binding(
-                            get: { player.currentTime },
-                            set: { player.seek(to: $0) }
+                            get: { displayedTime },
+                            set: { seekTarget = $0 }
                         ),
-                        in: 0...max(player.duration, 1)
+                        in: 0...max(player.duration, 1),
+                        onEditingChanged: { editing in
+                            if editing {
+                                isSeeking = true
+                                seekTarget = player.currentTime
+                            } else {
+                                player.seek(to: seekTarget)
+                                isSeeking = false
+                            }
+                        }
                     )
                     .tint(.primary)
 
                     HStack {
-                        Text(formatTime(player.currentTime))
+                        Text(formatTime(displayedTime))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                         Spacer()
-                        Text("-\(formatTime(max(0, player.duration - player.currentTime)))")
+                        Text("-\(formatTime(max(0, player.duration - displayedTime)))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -211,16 +228,18 @@ struct NowPlayingView: View {
                 Spacer()
             }
         }
+        .frame(width: geo.size.width, height: geo.size.height)
+        }
     }
 
     // MARK: - Artwork
 
     @ViewBuilder
-    private func artworkView(track: Track) -> some View {
+    private func artworkView(track: Track, size: CGFloat) -> some View {
         ArtworkView(
             trackURL: track.url,
             hasArtwork: track.hasArtwork,
-            pointSize: UIScreen.main.bounds.width - 48,
+            pointSize: size,
             fullResolution: true,
             placeholderIcon: "music.note"
         )
@@ -292,7 +311,11 @@ struct NowPlayingView: View {
                 let image = await ArtworkCache.thumbnail(for: track.url,
                                                           pointSize: 80,
                                                           scale: scale)
-                if let image, let color = image.dominantColor {
+                // CIAreaAverage is 50–150 ms; hop off the main actor.
+                let color = await Task.detached {
+                    image?.dominantColor
+                }.value
+                if let color {
                     ArtworkColorCache.set(color, for: track.url)
                     if artworkColorTrackID == track.id {
                         artworkColor = color
@@ -341,7 +364,7 @@ struct SyncedLyricsView: View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                    ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                         Text(line.text)
                             .font(.body)
                             .fontWeight(index == activeIndex ? .semibold : .regular)
@@ -386,7 +409,15 @@ enum ArtworkColorCache {
 // MARK: - Dominant Color Extraction
 
 extension UIImage {
-    var dominantColor: UIColor? {
+    /// Reused across dominant-color extractions. Creating a `CIContext` is
+    /// the expensive part; the 1×1 CIAreaAverage render is cheap by comparison.
+    /// `nonisolated(unsafe)` because `CIContext` is thread-safe for renders
+    /// but not `Sendable`-marked.
+    nonisolated(unsafe) private static let dominantColorContext: CIContext = {
+        CIContext(options: [.workingColorSpace: kCFNull as Any])
+    }()
+
+    nonisolated var dominantColor: UIColor? {
         guard let ciImage = CIImage(image: self) else { return nil }
         let extent = ciImage.extent
         let extentVector = CIVector(x: extent.origin.x, y: extent.origin.y,
@@ -397,7 +428,7 @@ extension UIImage {
               let output = filter.outputImage else { return nil }
 
         var bitmap = [UInt8](repeating: 0, count: 4)
-        let context = CIContext(options: [.workingColorSpace: kCFNull as Any])
+        let context = UIImage.dominantColorContext
         context.render(output, toBitmap: &bitmap, rowBytes: 4,
                        bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
                        format: .RGBA8, colorSpace: nil)

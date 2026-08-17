@@ -39,6 +39,9 @@ struct LocalMusicApp: App {
             }
             .environment(player)
             .environment(library)
+            .onChange(of: library.tracks) { _, _ in
+                player.refreshTrackMetadata { library.track(forURL: $0) }
+            }
             .task {
                 await library.bootstrap()
                 if let url = library.folderURL {

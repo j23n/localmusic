@@ -79,10 +79,37 @@ struct PlaybackQueue: Equatable {
         return .load(currentIndex)
     }
 
+    /// Natural end of the current track. Repeat One restarts the same item;
+    /// user-initiated Next goes through `skipForward()` so it can leave the
+    /// song even when Repeat One is on.
     mutating func next() -> Action {
         guard !currentQueue.isEmpty else { return .noop }
         if repeatMode == .one { return .restart }
+        return advance()
+    }
 
+    /// User-initiated Next (UI / lock-screen). Always advances, including
+    /// when `repeatMode == .one`. Wrap/stop follow `.all` / `.off` the same
+    /// way as a natural advance: wrap to 0 on `.all`, stop at the end otherwise.
+    mutating func skipForward() -> Action {
+        guard !currentQueue.isEmpty else { return .noop }
+        return advance()
+    }
+
+    /// Remap queue entries by URL after a library rescan so title/artist/
+    /// album/duration stay current. `currentIndex` and the shuffle layout
+    /// are preserved; tracks the lookup doesn't know about are left as-is.
+    mutating func refreshTrackMetadata(using lookup: (URL) -> Track?) {
+        func remap(_ tracks: [Track]) -> [Track] {
+            tracks.map { lookup($0.url.standardized) ?? $0 }
+        }
+        currentQueue = remap(currentQueue)
+        unshuffledQueue = remap(unshuffledQueue)
+    }
+
+    /// Advance to the next index, ignoring Repeat One. Wraps to 0 when
+    /// `repeatMode == .all`; otherwise stops at the end.
+    private mutating func advance() -> Action {
         let nextIndex = currentIndex + 1
         if nextIndex < currentQueue.count {
             currentIndex = nextIndex
